@@ -1,0 +1,24 @@
+
+# R/RStudio
+.Rhistory
+.RData
+.Rproj.user/
+.Ruserdata
+.Rprofile
+.Renviron
+
+# renv
+renv/library/
+renv/staging/
+renv/python/
+
+# data (outputs)
+data-raw/sia_cc_completo.rds
+*.feather
+*.parquet
+
+# misc
+.DS_Store
+*.tmp
+*.log
+.env
