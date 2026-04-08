@@ -98,14 +98,14 @@ mod_capacity_server <- function(id,
       req(input_global()$pais_sel)
       as.integer(input_global()$pais_sel)
     })
-    
+
     is_brazil <- reactive({
-      !is.na(br_code) && country_code() == br_code
+      !is.na(br_code) && isTRUE(country_code() == br_code)
     })
-    
+
     cap_geo_label <- function(g) {
       if (!isTRUE(is_brazil())) return("selected geography")
-      
+
       pick <- function(x, what) {
         if (is.null(x) || !length(x)) return(NULL)
         x <- as.character(x)
@@ -114,42 +114,19 @@ mod_capacity_server <- function(id,
         if (length(x) == 1L) return(paste0(what, ": ", x[1]))
         paste0(what, " (n=", length(x), "): ", x[1])
       }
-      
+
       mun   <- pick(g$filt_mun,   "Municipality")
       reg   <- pick(g$filt_reg,   "Health region")
       macro <- pick(g$filt_macro, "Macro-region")
       uf    <- pick(g$filt_uf,    "State")
-      
+
       if (!is.null(mun))   return(mun)
       if (!is.null(reg))   return(reg)
       if (!is.null(macro)) return(macro)
       if (!is.null(uf))    return(uf)
-      
+
       "Brazil"
     }
-    
-    output$cap_title <- renderUI({
-      g <- input_global()
-      geo <- cap_geo_label(g)
-      tags$h3(paste0("Procedure delivery — ", geo, ", 2024"))
-    })
-    # ---- país selecionado -------------------------------------------
-    country_code <- reactive({
-      req(input_global()$pais_sel)
-      as.integer(input_global()$pais_sel)
-    })
-    
-    br_code <- tryCatch(
-      {
-        x <- dim_country[dim_country$population_name == "Brazil", "population_code"]
-        if (length(x) == 0L || is.na(x[1])) NA_integer_ else as.integer(x[1])
-      },
-      error = function(e) NA_integer_
-    )
-    
-    is_brazil <- reactive({
-      !is.na(br_code) && isTRUE(country_code() == br_code)
-    })
     
     pick_all <- function(x) {
       if (is.null(x) || !length(x)) return("–")
@@ -508,19 +485,19 @@ mod_capacity_server <- function(id,
           "Cytology volume parameters: first-time exams = ", pct2(g$first_time_pct),
           "; unsatisfactory exams = ", pct2(g$unsatisfactory_pct), ".",
           "<br/>",
-          "Cytology results: ASC-H+ = ", pct2(g$res_asch_pct),
+          "Cytology results: HSIL / ASC-H / AOI / AIS / Carcinoma = ", pct2(g$res_asch_pct),
           "; other abnormalities = ", pct2(g$res_other_pct),
           "; negative = ", pct2(g$res_neg_pct), ".",
           "<br/>",
-          "Colposcopy referral: after ASC-H+ = ", pct2(g$colpo_asch_pct),
+          "Colposcopy referral: after HSIL / ASC-H / AOI / AIS / Carcinoma = ", pct2(g$colpo_asch_pct),
           "; after other abnormalities = ", pct2(g$colpo_other_follow_pct), ".",
           "<br/>",
-          "Colposcopy positivity (biopsy indication): ASC-H+ arm = ", pct2(g$biopsy_pos_asch_pct),
+          "Colposcopy positivity (biopsy indication): HSIL / ASC-H / AOI / AIS / Carcinoma arm = ", pct2(g$biopsy_pos_asch_pct),
           "; other abnormalities arm = ", pct2(g$biopsy_pos_other_pct), "."
         )
         
         note_trt <- paste0(
-          "Biopsy outcomes (ASC-H+ arm): CIN2/3 = ", pct2(g$b_asch_nic23_pct),
+          "Biopsy outcomes (HSIL / ASC-H / AOI / AIS / Carcinoma arm): CIN2/3 = ", pct2(g$b_asch_nic23_pct),
           "; cancer = ", pct2(g$b_asch_cancer_pct),
           "; negative/CIN1 = ", pct2(g$b_asch_neg_nic1_pct), ".",
           "<br/>",

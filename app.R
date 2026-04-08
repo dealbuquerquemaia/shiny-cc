@@ -32,7 +32,8 @@ pop_municipio_faixas           <- readRDS("data/pop_municipio_faixas.rds")
 pop_municipio_faixas_total_sus <- readRDS("data/pop_municipio_faixas_total_sus.rds")
 pop_municipio_regional         <- readRDS("data/pop_municipio_regional.rds")
 regional_sus_map               <- readRDS("data/regional_sus_map.rds")
-sia_cc_resumo                  <- readRDS("data/sus_proc_resumo.rds")   
+sia_cc_resumo                  <- readRDS("data/sus_proc_resumo.rds")
+cito_presets                   <- readRDS("data/cito_presets.rds")
 
 # data.table
 setDT(df_cc_completo)
@@ -105,20 +106,57 @@ ui <- tagList(
       }
 
       /* Painel lateral (off-canvas) */
-      #cc-settings-panel {
-        position: fixed;
-        top: 51px;
-        left: -320px;
-        width: 300px;
-        height: calc(100% - 51px);
-        background-color: var(--cc-white);
-        box-shadow: 2px 0 6px rgba(0,0,0,0.15);
-        padding: 15px;
-        z-index: 2000;
-        overflow-y: auto;
-        transition: left 0.25s ease-in-out;
+     #cc-settings-panel {
+  position: fixed;
+  top: 51px;
+  left: 0;
+  width: 360px;
+  height: calc(100% - 51px);
+  background-color: var(--cc-white);
+  box-shadow: 2px 0 6px rgba(0,0,0,0.15);
+  padding: 15px;
+  z-index: 2000;
+  overflow-y: auto;
+  transition: transform 0.25s ease-in-out;
+  transform: translateX(0);
+}
+
+body.cc-collapsed #cc-settings-panel {
+  transform: translateX(-100%);
+}
+
+/* Empurra o conteúdo para a direita quando sidebar está aberta */
+      .tab-content {
+        margin-left: 360px;
+        transition: margin-left 0.25s ease-in-out;
+      } 
+body.cc-collapsed .tab-content {
+        margin-left: 0;
+}
+      
+      /* Botão seta (toggle) dentro da sidebar */
+      .cc-sidebar-top {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        margin-bottom: 8px;
       }
-      #cc-settings-panel.cc-open { left: 0; }
+
+      .cc-sidebar-toggle {
+        border: 0;
+        background: transparent;
+        font-size: 18px;
+        font-weight: 700;
+        color: #243C7A;
+        padding: 4px 6px;
+        cursor: pointer;
+      }
+
+      .cc-sidebar-toggle:hover {
+        opacity: 0.75;
+      }
+
+#cc-settings-panel.cc-open { left: 0; }
 
       #cc-settings-overlay {
         position: fixed;
@@ -189,6 +227,8 @@ ui <- tagList(
         margin-left: 12px;
         margin-bottom: 8px;
       }
+      
+
 
       /* Cards de epidemiologia */
       .cc-kpi-card {
@@ -319,16 +359,27 @@ ui <- tagList(
     tags$script(HTML("
       $(function(){
 
-        // abre/fecha painel lateral
-        $('#cc_hamburger').on('click', function(){
-          $('#cc-settings-panel').toggleClass('cc-open');
-          $('#cc-settings-overlay').toggleClass('cc-open');
+        function cc_set_arrow(){
+          if ($('body').hasClass('cc-collapsed')) {
+            $('#cc_sidebar_toggle').text('❯');
+          } else {
+            $('#cc_sidebar_toggle').text('❮');
+          }
+        }
+
+        // toggle pela seta
+        $(document).on('click', '#cc_sidebar_toggle', function(){
+          $('body').toggleClass('cc-collapsed');
+          cc_set_arrow();
         });
 
-        $('#cc-settings-overlay').on('click', function(){
-          $('#cc-settings-panel').removeClass('cc-open');
-          $('#cc-settings-overlay').removeClass('cc-open');
+        // opcional: hamburger faz a mesma função (pode manter)
+        $('#cc_hamburger').on('click', function(){
+          $('body').toggleClass('cc-collapsed');
+          cc_set_arrow();
         });
+
+        cc_set_arrow();
 
         // acordeão: abre/fecha seções internas
         $('#cc-settings-panel').on('click', '.cc-section-header', function(){
@@ -368,12 +419,16 @@ ui <- tagList(
     tabPanel("About",        mod_sobre_ui("sobre"))
   ),
   
-  # Overlay para fechar clicando fora -----------------------------------
-  div(id = "cc-settings-overlay"),
   
   # Painel lateral de configurações globais -----------------------------
   div(
     id = "cc-settings-panel",
+    
+    div(
+      class = "cc-sidebar-top",
+      tags$button(id = "cc_sidebar_toggle", type = "button", class = "cc-sidebar-toggle", HTML("❮"))
+    ),
+    
     mod_filters_cc_ui("filters", df_dim_country, br_code = br_code)
     
   )

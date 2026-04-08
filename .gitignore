@@ -22,3 +22,6 @@ data-raw/sia_cc_completo.rds
 *.tmp
 *.log
 .env
+
+# deployment
+rsconnect/
