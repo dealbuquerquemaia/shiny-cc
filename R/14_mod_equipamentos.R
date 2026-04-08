@@ -313,19 +313,19 @@ mod_equipment_server <- function(id,
           "Cytology volume parameters: first-time exams = ", pct2(g$first_time_pct),
           "; unsatisfactory exams = ", pct2(g$unsatisfactory_pct), ".",
           "<br/>",
-          "Cytology results: ASC-H+ = ", pct2(g$res_asch_pct),
+          "Cytology results: HSIL / ASC-H / AOI / AIS / Carcinoma = ", pct2(g$res_asch_pct),
           "; other abnormalities = ", pct2(g$res_other_pct),
           "; negative = ", pct2(g$res_neg_pct), ".",
           "<br/>",
-          "Colposcopy referral: after ASC-H+ = ", pct2(g$colpo_asch_pct),
+          "Colposcopy referral: after HSIL / ASC-H / AOI / AIS / Carcinoma = ", pct2(g$colpo_asch_pct),
           "; after other abnormalities = ", pct2(g$colpo_other_follow_pct), ".",
           "<br/>",
-          "Colposcopy positivity (biopsy indication): ASC-H+ arm = ", pct2(g$biopsy_pos_asch_pct),
+          "Colposcopy positivity (biopsy indication): HSIL / ASC-H / AOI / AIS / Carcinoma arm = ", pct2(g$biopsy_pos_asch_pct),
           "; other abnormalities arm = ", pct2(g$biopsy_pos_other_pct), "."
         )
         
         note_trt <- paste0(
-          "Biopsy outcomes (ASC-H+ arm): CIN2/3 = ", pct2(g$b_asch_nic23_pct),
+          "Biopsy outcomes (HSIL / ASC-H / AOI / AIS / Carcinoma arm): CIN2/3 = ", pct2(g$b_asch_nic23_pct),
           "; cancer = ", pct2(g$b_asch_cancer_pct),
           "; negative/CIN1 = ", pct2(g$b_asch_neg_nic1_pct), ".",
           "<br/>",

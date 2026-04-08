@@ -37,6 +37,7 @@ cc_engine_settings <- function(
     bo_neg_nic1       = NULL,
     bo_nic23          = NULL,
     bo_cancer         = NULL,
+    hpv_followup_pos_pct = NULL,
 
     
     # ---------- Citologia (percentuais em %) ----------
@@ -110,6 +111,7 @@ cc_engine_settings <- function(
   bo_neg_nic1  <- hpv_or_def(bo_neg_nic1,  d_hpv$bo_neg_nic1)
   bo_nic23     <- hpv_or_def(bo_nic23,     d_hpv$bo_nic23)
   bo_cancer    <- hpv_or_def(bo_cancer,    d_hpv$bo_cancer)
+  hpv_followup_pos_pct <- hpv_or_def(hpv_followup_pos_pct, d_hpv$hpv_followup_pos_pct)
   
   # ---------- Defaults Citologia (centralizado em CITO_DEFAULTS) ----------
   if (!exists("CITO_DEFAULTS", inherits = TRUE)) {
@@ -169,6 +171,7 @@ cc_engine_settings <- function(
     bo_neg_nic1      = as.numeric(bo_neg_nic1),
     bo_nic23         = as.numeric(bo_nic23),
     bo_cancer        = as.numeric(bo_cancer),
+    hpv_followup_pos_pct = as.numeric(hpv_followup_pos_pct),
     
     first_time_pct         = as.numeric(first_time_pct),
     unsatisfactory_pct     = as.numeric(unsatisfactory_pct),
@@ -330,6 +333,7 @@ cc_workup_metrics <- function(N_rastreada, cfg, eligible = NULL) {
     bo_neg_nic1  <- get_pct(cfg$bo_neg_nic1,  d$bo_neg_nic1)
     bo_nic23     <- get_pct(cfg$bo_nic23,     d$bo_nic23)
     bo_cancer    <- get_pct(cfg$bo_cancer,    d$bo_cancer)
+    fu_pos       <- get_pct(cfg$hpv_followup_pos_pct, d$hpv_followup_pos_pct)
     
     
     res <- modelo_hpv(
@@ -339,7 +343,8 @@ cc_workup_metrics <- function(N_rastreada, cfg, eligible = NULL) {
       colpo16_pos = colpo16_pos, colpo16_neg = colpo16_neg,
       colpoout_pos = colpoout_pos, colpoout_neg = colpoout_neg,
       b16_neg_nic1 = b16_neg_nic1, b16_nic23 = b16_nic23, b16_cancer = b16_cancer,
-      bo_neg_nic1 = bo_neg_nic1, bo_nic23 = bo_nic23, bo_cancer = bo_cancer
+      bo_neg_nic1 = bo_neg_nic1, bo_nic23 = bo_nic23, bo_cancer = bo_cancer, 
+      hpv_followup_pos = fu_pos
     )
     data.table::setDT(res)
     return(res[])
@@ -665,6 +670,7 @@ cc_engine_summary_dt <- function(res) {
     ezt                 = get1("ezt"),
     alta_complexidade   = get1("alta_complexidade"),
     retorno_1ano        = get1("retorno_1ano"),
+    followup_colposcopy = get1("followup_colposcopy"),
     
     # Novas métricas (citologia)
     followup_cytologies    = get1("followup_cytologies"),
@@ -890,7 +896,7 @@ modelo_hpv <- function(N,
                        colpo16_pos, colpo16_neg,
                        colpoout_pos, colpoout_neg,
                        b16_neg_nic1, b16_nic23, b16_cancer,
-                       bo_neg_nic1,  bo_nic23,  bo_cancer) {
+                       bo_neg_nic1,  bo_nic23,  bo_cancer,  hpv_followup_pos) {
   
   tot <- p16_18 + poutros + pneg
   if (!is.finite(tot) || is.na(tot) || tot <= 0) tot <- 1
@@ -927,7 +933,8 @@ modelo_hpv <- function(N,
   ezt  <- ezt_16 + ezt_out
   alta <- cancer_16 + cancer_out
   
-  retorno_1ano <- biop_neg_16 + biop_neg_out + colpo_neg + cito_neg_outros
+  retorno_1ano <- biop_neg_16 + biop_neg_out + colpo_neg + cito_neg_outros + 2*ezt
+  followup_colposcopy <- retorno_1ano * hpv_followup_pos
   
   data.table::data.table(
     rastreada         = N,
@@ -936,7 +943,8 @@ modelo_hpv <- function(N,
     biopsia_indicada  = biopsia_indicada,
     ezt               = ezt,
     alta_complexidade = alta,
-    retorno_1ano      = retorno_1ano
+    retorno_1ano      = retorno_1ano,
+    followup_colposcopy = followup_colposcopy
   )
 }
 

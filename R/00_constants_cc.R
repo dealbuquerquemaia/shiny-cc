@@ -1,6 +1,6 @@
 # ===========================================================
 # Shiny-cc — R/00_constants_cc.R
-# Constantes e paletas
+# Constants; colors; default parameters
 # ===========================================================
 
 AGE_ORDER <- c(
@@ -58,7 +58,19 @@ HPV_DEFAULTS <- list(
   b16_cancer   = 2.94840294840295,
   bo_neg_nic1  = 65.016501650165,
   bo_nic23     = 33.993399339934,
-  bo_cancer    = 0.99009900990099
+  bo_cancer    = 0.99009900990099,
+  hpv_followup_pos_pct = 5
+)
+
+# ---- Presets HPV (parâmetros fechados por fonte de dados) ----
+# Cada entrada é uma lista com os mesmos campos de HPV_DEFAULTS.
+# O label é o nome exibido no radio button.
+HPV_PRESETS <- list(
+  indaiatuba = list(
+    label = "PREVENTIVO - Indaiatuba",
+    params = HPV_DEFAULTS
+  )
+  # futuros presets: pernambuco = list(label = "...", params = list(...))
 )
 
 # ---- Defaults Citologia (modelo de fluxo; percentuais em %) ----
@@ -80,7 +92,7 @@ CITO_DEFAULTS <- list(
   biopsy_pos_asch_pct  = 33.3,
   biopsy_pos_other_pct = 33.3,
   
-  # desfecho da biópsia (entre biópsias positivas) — ASC-H+
+  # desfecho da biópsia (entre biópsias positivas) — HSIL / ASC-H / AOI / AIS / Carcinoma
   b_asch_nic23_pct    = 70.0,
   b_asch_cancer_pct   = 15.0,
   b_asch_neg_nic1_pct = 15.0,
@@ -92,6 +104,20 @@ CITO_DEFAULTS <- list(
 )
 
 
+
+# ---- Presets Citologia (metadados das fontes) ----
+# Os parâmetros em si estão em data/cito_presets.rds (gerado por 07_prepare_cito_presets.R).
+# Cada entrada define o label exibido no radio button e se a fonte tem dados por UF.
+CITO_PRESETS_META <- list(
+  inca2019 = list(
+    label    = "INCA 2019",
+    por_uf   = FALSE   # mesmo valor para qualquer seleção geográfica
+  ),
+  siscan = list(
+    label    = "SISCAN 2022-2024",
+    por_uf   = TRUE    # usa dado da UF selecionada (1 UF); caso contrário, usa Brasil
+  )
+)
 
 # ---- Tooltips (CCU) — Summary cards ----
 if (!exists("cc_TOOLTIPS", inherits = FALSE)) cc_TOOLTIPS <- list()
@@ -109,17 +135,18 @@ cc_TOOLTIPS$resumo_geral_ccu <- list(
     biopsia_indicada  = "Biopsy indicated: positive colposcopy.",
     ezt               = "Excisional treatment indicated (CIN2+ excluding invasive cancer).",
     alta_complexidade = "High complexity: invasive cancer (from biopsy).",
-    retorno_1ano      = "Return in 1 year: negative/NIC1 biopsy OR negative colposcopy OR other HR-HPV positive with reflex cytology negative."
+    retorno_1ano      = "Follow-up HPV: negative/NIC1 biopsy; negative colposcopy; other HR-HPV positive with reflex cytology negative; two HPV tests (at 6 and 18 months) post-treatment surveillance.",
+    followup_colposcopy = "Follow-up colposcopies: colposcopies triggered by a positive HPV result during follow-up"
   ),
   cytology = list(
     cit_rastreamento      = "Screening cytologies per year: eligible/3 + eligible×first-time% + eligible×unsatisfactory%.",
     cit_diagnostica       = "Diagnostic (repeat) cytologies: screening cytologies × proportion with 'Other abnormalities'.",
-    colpo_indicada        = "Initial colposcopies: (ASC-H+ cytologies × colposcopy after ASC-H+) + (Other abnormalities × colposcopy after other abnormalities).",
-    biopsia_indicada      = "Biopsies indicated: initial colposcopies × colposcopy positivity (biopsy indication), for each arm (ASC-H+ and Other).",
+    colpo_indicada        = "Initial colposcopies: (HSIL / ASC-H / AOI / AIS / Carcinoma cytologies × colposcopy after HSIL / ASC-H / AOI / AIS / Carcinoma) + (Other abnormalities × colposcopy after other abnormalities).",
+    biopsia_indicada      = "Biopsies indicated: initial colposcopies × colposcopy positivity (biopsy indication), for each arm (HSIL / ASC-H / AOI / AIS / Carcinoma and Other).",
     followup_cytologies   = "Follow-up cytologies: negative colposcopies + (biopsy negative/NIC1) + (EZT × 6 follow-up cytologies).",
     followup_colposcopies = "Follow-up colposcopies: negative colposcopies + (EZT × 2 follow-up colposcopies).",
-    ezt                  = "Excisional treatment indicated (CIN2/3 from positive biopsies; ASC-H+ and Other arms).",
-    alta_complexidade     = "High complexity: invasive cancer (from positive biopsies; ASC-H+ and Other arms)."
+    ezt                  = "Excisional treatment indicated (CIN2/3 from positive biopsies; HSIL / ASC-H / AOI / AIS / Carcinoma and Other arms).",
+    alta_complexidade     = "High complexity: invasive cancer (from positive biopsies; HSIL / ASC-H / AOI / AIS / Carcinoma and Other arms)."
   )
 )
 cc_TOOLTIPS$capacidade_ccu <- list(

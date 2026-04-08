@@ -270,7 +270,10 @@ mod_resumo_geral_server <- function(
           "; Other HR-HPV reflex cytology positivity: ", pct2(g$cito_out_pos), ".",
           "<br/>",
           "Colposcopy parameters: HPV 16/18+: ", pct2(g$colpo16_pos),
-          "; after other HR-HPV+: ", pct2(g$colpoout_pos), "."
+          "; after other HR-HPV+: ", pct2(g$colpoout_pos), ".",
+          "<br/>",
+          "Follow-up HPV positivity = ", pct2(g$hpv_followup_pos_pct),
+          "; After treatment HPV tests at 6 and 18 months; all HPV-positive follow-up tests are referred to colposcopy."
         )
         
         cin2p_16  <- if (is.na(num_or_na(g$b16_nic23))) "NA" else sprintf("%.2f%%", num_or_na(g$b16_nic23))
@@ -291,19 +294,19 @@ mod_resumo_geral_server <- function(
           "Cytology volume parameters: first-time exams = ", pct2(g$first_time_pct),
           "; unsatisfactory exams = ", pct2(g$unsatisfactory_pct), ".",
           "<br/>",
-          "Cytology results: ASC-H+ = ", pct2(g$res_asch_pct),
+          "Cytology results: HSIL / ASC-H / AOI / AIS / Carcinoma = ", pct2(g$res_asch_pct),
           "; other abnormalities = ", pct2(g$res_other_pct),
           "; negative = ", pct2(g$res_neg_pct), ".",
           "<br/>",
-          "Colposcopy referral: after ASC-H+ = ", pct2(g$colpo_asch_pct),
+          "Colposcopy referral: after HSIL / ASC-H / AOI / AIS / Carcinoma = ", pct2(g$colpo_asch_pct),
           "; after other abnormalities = ", pct2(g$colpo_other_follow_pct), ".",
           "<br/>",
-          "Colposcopy positivity (biopsy indication): ASC-H+ arm = ", pct2(g$biopsy_pos_asch_pct),
+          "Colposcopy positivity (biopsy indication): HSIL / ASC-H / AOI / AIS / Carcinoma arm = ", pct2(g$biopsy_pos_asch_pct),
           "; other abnormalities arm = ", pct2(g$biopsy_pos_other_pct), "."
         )
         
         note_trt <- paste0(
-          "Biopsy outcomes (ASC-H+ arm): CIN2/3 = ", pct2(g$b_asch_nic23_pct),
+          "Biopsy outcomes (HSIL / ASC-H / AOI / AIS / Carcinoma arm): CIN2/3 = ", pct2(g$b_asch_nic23_pct),
           "; cancer = ", pct2(g$b_asch_cancer_pct),
           "; negative/CIN1 = ", pct2(g$b_asch_neg_nic1_pct), ".",
           "<br/>",
@@ -364,8 +367,9 @@ mod_resumo_geral_server <- function(
           div(
             class = "cards-ccu-wrap",
             card("Excision indicated (EZT)", s$ezt,              tt$hpv$ezt,               flex = "flex: 1 1 320px;"),
-            card("Invasive Carcinoma",         s$alta_complexidade, tt$hpv$alta_complexidade, flex = "flex: 1 1 320px;"),
-            card("Return in 1 year",        s$retorno_1ano,      tt$hpv$retorno_1ano,       flex = "flex: 1 1 320px;")
+            #card("Invasive Carcinoma",         s$alta_complexidade, tt$hpv$alta_complexidade, flex = "flex: 1 1 320px;"),
+            card("Follow-up HPV",        s$retorno_1ano,      tt$hpv$retorno_1ano,       flex = "flex: 1 1 320px;"), 
+            card("Follow-up colposcopy", s$followup_colposcopy, tt$hpv$followup_colposcopy, flex = "flex: 1 1 320px;")
           ),
           div(class = "ccu-note", HTML(note_trt))
         )
@@ -376,8 +380,8 @@ mod_resumo_geral_server <- function(
             class = "cards-ccu-wrap",
             card("Excision indicated (EZT)",  s$ezt,               tt$cytology$ezt,                flex = "flex: 1 1 320px;"),
             card("Follow-up cytologies",  s$followup_cytologies,  (tt$cytology$followup_cytologies %||% NULL),  flex = "flex: 1 1 320px;"),
-            card("Follow-up colposcopies", s$followup_colposcopies, (tt$cytology$followup_colposcopies %||% NULL), flex = "flex: 1 1 320px;"),
-            card("Invasive Carcinoma",        s$alta_complexidade, tt$cytology$alta_complexidade,  flex = "flex: 1 1 320px;")
+            card("Follow-up colposcopies", s$followup_colposcopies, (tt$cytology$followup_colposcopies %||% NULL), flex = "flex: 1 1 320px;")
+            #,card("Invasive Carcinoma",        s$alta_complexidade, tt$cytology$alta_complexidade,  flex = "flex: 1 1 320px;")
           ),
         
           div(class = "ccu-note", HTML(note_trt))

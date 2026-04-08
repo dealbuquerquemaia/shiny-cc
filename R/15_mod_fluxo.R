@@ -472,7 +472,7 @@ a [label='Flow not available for current settings.']
         "scr [label='", lbl("Screening cytologies", N), "', pos='0,0!', width=2.55];",
         
         "neg  [label='", lbl_pct("Negative", f$negative, p_neg), "', pos='0,-2.3!'];",
-        "asch [label='", lbl_pct("ASC-H+", f$asch, p_asch), "', pos='3.8,1.9!'];",
+        "asch [label='", lbl_pct("HSIL / ASC-H / AOI / AIS / CarcinomaHSIL / ASC-H / AOI / AIS / Carcinoma", f$asch, p_asch), "', pos='3.8,1.9!'];",
         "oth  [label='", lbl_pct("Other abnormalities", f$other, p_oth), "', pos='3.8,-1.9!', width=2.75];",
         
         "dpos [label='", lbl_pct("Diagnostic cytology +", f$diag_pos, p_dpos), "', pos='7.9,-1.2!', width=2.85];",
