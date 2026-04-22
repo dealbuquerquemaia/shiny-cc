@@ -1,0 +1,304 @@
+---
+title: "Cervical Cancer Screening Report"
+params:
+  geo_label:           "World"
+  method:              "hpv"
+  preset_label:        "Default"
+  age_from:            25
+  age_to:              64
+  coverage:            70
+  date:                ""
+  logo_fsp_png:        ""
+  logo_iarc_png:       ""
+  pop_selected:        "–"
+  screened_year:       "–"
+  cito_label:          "Reflex cytology"
+  cito_val:            "–"
+  colpo_val:           "–"
+  biopsy_val:          "–"
+  ezt_val:             "–"
+  followup_test_label: "Follow-up HPV"
+  followup_test_val:   "–"
+  followup_colpo_val:  "–"
+  equip_rows:          !r list()
+  inc_n:               "–"
+  inc_asr:             "–"
+  mort_n:              "–"
+  mort_asr:            "–"
+  is_brazil:           FALSE
+  cap_rows:            !r list()
+  assumptions:         ""
+output:
+  html_document:
+    theme:          null
+    highlight:      null
+    self_contained: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r report, results='asis'}
+p <- params
+
+# ── helpers ────────────────────────────────────────────────────────────
+d   <- function(x) if (is.null(x) || length(x) == 0 || (length(x) == 1 && is.na(x))) "\u2013" else as.character(x)
+h   <- function(...) paste0(..., collapse = "")
+
+# ── table row builders ─────────────────────────────────────────────────
+row2 <- function(metric, val)
+  h('<tr><td class="m">', metric, '</td><td class="r">', d(val), '</td></tr>')
+
+row3 <- function(metric, v1, v2)
+  h('<tr><td class="m">', metric, '</td>',
+    '<td class="r">', d(v1), '</td>',
+    '<td class="r">', d(v2), '</td></tr>')
+
+sec_title <- function(label)
+  h('<div class="sec">', label, '</div>')
+
+th <- function(x, right = FALSE)
+  h('<th', if (right) ' class="r"' else '', '>', x, '</th>')
+
+# ── capacity bar helpers ───────────────────────────────────────────────
+bar_col <- function(pn) {
+  if (!is.finite(pn)) "#cccccc"
+  else if (pn < 50) "#D9534F"
+  else if (pn < 100) "#E8A838"
+  else "#6BAE9A"
+}
+bar_w   <- function(pn) if (!is.finite(pn)) 0 else min(pn, 100)
+pct_lbl <- function(pn) if (!is.finite(pn)) "\u2013" else paste0(round(pn, 1), "%")
+
+# ── CSS ────────────────────────────────────────────────────────────────
+css <- '
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 11px;
+  color: #1a1a1a;
+  background: #fff;
+}
+.page { width: 182mm; margin: 0 auto; }
+.hdr {
+  background: #0F6B7A;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.geo {
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+.logos {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  margin-left: 20px;
+}
+.logos img { height: 36px; width: auto; filter: brightness(0) invert(1); opacity: 0.88; }
+.sec {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: #f0f2f5;
+  color: #0B7285;
+  padding: 6px 12px;
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin-bottom: 0;
+}
+thead tr { background: #f8fbfc; }
+th {
+  padding: 5px 12px;
+  text-align: left;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #0B7285;
+  border-bottom: 1px solid #cce4e8;
+}
+th.r { text-align: right; }
+tbody tr { border-bottom: 1px solid #f0f0f0; }
+tbody tr:nth-child(even) { background: #fafcfc; }
+td { padding: 5px 12px; vertical-align: middle; }
+td.r {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #111;
+}
+td.m { color: #444; }
+.cap-row { display: flex; align-items: center; gap: 8px; }
+.cap-bar  { flex: 1; height: 6px; border-radius: 3px; background: #e8e8e8; overflow: hidden; }
+.cap-fill { height: 100%; border-radius: 3px; }
+.cap-pct  { font-size: 10px; font-weight: 700; min-width: 40px; text-align: right; }
+.footer-rule { border: none; border-top: 1px solid #e0e0e0; margin-top: 18px; margin-bottom: 8px; }
+.footer-note {
+  font-size: 9px;
+  color: #888;
+  line-height: 1.65;
+  padding: 0 2px;
+}
+@media print {
+  @page { size: A4 portrait; margin: 10mm 12mm 12mm 12mm; }
+  body { font-size: 10.5px; }
+  .page { width: 100%; }
+}
+</style>'
+
+# ── logos ──────────────────────────────────────────────────────────────
+logo_imgs <- ""
+if (nzchar(p$logo_fsp_png) && file.exists(p$logo_fsp_png))
+  logo_imgs <- h(logo_imgs, '<img src="', p$logo_fsp_png, '" alt="FSP-USP">')
+if (nzchar(p$logo_iarc_png) && file.exists(p$logo_iarc_png))
+  logo_imgs <- h(logo_imgs, '<img src="', p$logo_iarc_png, '" alt="IARC">')
+logos_div <- if (nzchar(logo_imgs)) h('<div class="logos">', logo_imgs, '</div>') else ""
+
+# ── Section 1: Target population ───────────────────────────────────────
+sec1 <- h(
+  sec_title("Target population"),
+  '<table>',
+    '<thead><tr>', th("Metric"), th("Value", right = TRUE), '</tr></thead>',
+    '<tbody>',
+      row2("Selected population", p$pop_selected),
+      row2("Screened per year",   p$screened_year),
+    '</tbody>',
+  '</table>'
+)
+
+# ── Section 2: Epidemiology ────────────────────────────────────────────
+sec2 <- h(
+  sec_title("Epidemiology \u2014 GLOBOCAN 2022"),
+  '<table>',
+    '<thead><tr>',
+      th("Indicator"), th("Cases / Deaths", right = TRUE), th("ASR (World)", right = TRUE),
+    '</tr></thead>',
+    '<tbody>',
+      row3("Cervical cancer incidence", p$inc_n,  p$inc_asr),
+      row3("Cervical cancer mortality",  p$mort_n, p$mort_asr),
+    '</tbody>',
+  '</table>'
+)
+
+# ── Section 3: Work-up ─────────────────────────────────────────────────
+sec3 <- h(
+  sec_title("Work-up"),
+  '<table>',
+    '<thead><tr>', th("Procedure"), th("Estimated need (annual)", right = TRUE), '</tr></thead>',
+    '<tbody>',
+      row2(p$cito_label,          p$cito_val),
+      row2("Colposcopy indicated", p$colpo_val),
+      row2("Biopsy indicated",     p$biopsy_val),
+    '</tbody>',
+  '</table>'
+)
+
+# ── Section 4: Treatment & follow-up ───────────────────────────────────
+sec4 <- h(
+  sec_title("Treatment and follow-up"),
+  '<table>',
+    '<thead><tr>', th("Procedure"), th("Estimated need (annual)", right = TRUE), '</tr></thead>',
+    '<tbody>',
+      row2("Excision (EZT)",       p$ezt_val),
+      row2(p$followup_test_label,  p$followup_test_val),
+      row2("Follow-up colposcopy", p$followup_colpo_val),
+    '</tbody>',
+  '</table>'
+)
+
+# ── Section 5: Equipment & HR ──────────────────────────────────────────
+eq_body <- if (length(p$equip_rows) == 0) {
+  '<tr><td colspan="4" style="color:#aaa">No data available.</td></tr>'
+} else {
+  paste(sapply(p$equip_rows, function(r) {
+    h('<tr>',
+      '<td class="m">', r$label,       '</td>',
+      '<td class="r">', d(r$demand),   '</td>',
+      '<td class="r">', d(r$cap),      '</td>',
+      '<td class="r">', d(r$required), '</td>',
+      '</tr>')
+  }), collapse = "")
+}
+
+sec5 <- h(
+  sec_title("Equipment &amp; Human resources needed"),
+  '<table>',
+    '<thead><tr>',
+      th("Resource"),
+      th("Demand (annual)",   right = TRUE),
+      th("Capacity (annual)", right = TRUE),
+      th("Units required",    right = TRUE),
+    '</tr></thead>',
+    '<tbody>', eq_body, '</tbody>',
+  '</table>'
+)
+
+# ── Section 6: Capacity (Brazil only) ──────────────────────────────────
+sec6 <- ""
+if (isTRUE(p$is_brazil) && length(p$cap_rows) > 0) {
+  cap_body <- paste(sapply(p$cap_rows, function(r) {
+    pn  <- suppressWarnings(as.numeric(r$pct_num))
+    if (!is.finite(pn)) pn <- NA_real_
+    col <- bar_col(pn)
+    w   <- bar_w(pn)
+    lbl <- pct_lbl(pn)
+    h('<tr>',
+      '<td class="m">', r$label,     '</td>',
+      '<td class="r">', d(r$actual), '</td>',
+      '<td class="r">', d(r$needed), '</td>',
+      '<td>',
+        '<div class="cap-row">',
+          '<div class="cap-bar">',
+            '<div class="cap-fill" style="width:', w, '%;background:', col, '"></div>',
+          '</div>',
+          '<span class="cap-pct" style="color:', col, '">', lbl, '</span>',
+        '</div>',
+      '</td>',
+      '</tr>')
+  }), collapse = "")
+
+  sec6 <- h(
+    sec_title("Capacity \u2014 Actual production vs. estimated need (SUS/SIA 2024)"),
+    '<table>',
+      '<thead><tr>',
+        th("Procedure"),
+        th("Actual (SUS 2024)", right = TRUE),
+        th("Estimated need",    right = TRUE),
+        '<th style="width:150px">Coverage</th>',
+      '</tr></thead>',
+      '<tbody>', cap_body, '</tbody>',
+    '</table>'
+  )
+}
+
+# ── Assemble full page and emit once ───────────────────────────────────
+cat(h(
+  css, '\n\n',
+  '<div class="page">',
+    '<div class="hdr">',
+      '<div class="geo">', p$geo_label, '</div>',
+      logos_div,
+    '</div>',
+    sec1, sec2, sec3, sec4, sec5, sec6,
+    '<hr class="footer-rule">',
+    '<p class="footer-note">', p$assumptions, '</p>',
+  '</div>'
+))
+```

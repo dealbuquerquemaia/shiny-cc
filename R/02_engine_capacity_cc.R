@@ -722,7 +722,7 @@ cc_capacity_from_sia <- function(sia_cc_resumo, ano_cmp_ref = 2024L) {
   
   # ------------------------------------------------------------
   # Caso 1 (NOVO): dataset SUS "resumo" já filtrado para o ano
-  # Espera colunas: categoria, total_all (e opcional total_25_69),
+  # Espera colunas: categoria, total_all (e opcional total_25_64),
   # e pode conter geo_ref/geo_id/PA_PROC_ID/nome_procedimento etc.
   # Aqui a agregação é feita pela categoria (mais robusto e inclui SIH como tratamento).
   # ------------------------------------------------------------

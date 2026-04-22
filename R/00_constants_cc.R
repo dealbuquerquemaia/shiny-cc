@@ -67,7 +67,7 @@ HPV_DEFAULTS <- list(
 # O label é o nome exibido no radio button.
 HPV_PRESETS <- list(
   indaiatuba = list(
-    label = "PREVENTIVO - Indaiatuba",
+    label = "Indaiatuba",
     params = HPV_DEFAULTS
   )
   # futuros presets: pernambuco = list(label = "...", params = list(...))
@@ -127,7 +127,7 @@ cc_TOOLTIPS$resumo_geral_ccu <- list(
     scope_prefix   = "Geographic selection: ",
     pop_selected   = "Target female population in the selected age range, based on the selected population source and (if Brazil) geographic filters.",
     eligible       = "Eligible women = pop_selected × coverage.",
-    screened_year  = "HPV: eligible / 5 (assumes 5-year interval). Cytology: eligible × screening cytology proportion."
+    screened_year  = "HPV: eligible / 5 (assumes 5-year interval). Cytology: eligible/3 (assumes 3-year interval) + first time exams (repeat in one year) + unsatisfatory exams"
   ),
   hpv = list(
     cito_reflexa      = "Women with other HR-HPV positive requiring reflex cytology (per HPV pathway parameters).",

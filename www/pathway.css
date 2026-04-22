@@ -1,0 +1,98 @@
+/* ── Pathway diagram ── */
+
+.pathway-card {
+  margin-top: 16px;
+  background: white;
+  border: 1px solid #e1e8e6;
+  border-radius: 10px;
+  padding: 28px 24px 20px;
+}
+
+/* Wrapper scales the fixed canvas to fit available width */
+.pathway-scalable-wrapper {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  /* height set by JS based on scale */
+}
+
+.pathway-scalable {
+  transform-origin: top left;
+  /* transform: scale() set by JS */
+}
+
+.pathway-container {
+  position: relative;
+  width: 1200px;
+  height: 780px;
+}
+
+.phase-header {
+  position: absolute;
+  top: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #6b8885;
+  text-align: center;
+  width: 200px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid #d8e2e0;
+}
+
+.node {
+  position: absolute;
+  width: 200px;
+  border-radius: 8px;
+  padding: 9px 12px 10px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  z-index: 2;
+  min-height: 64px;
+}
+.node .label,
+.node .count,
+.node .pct {
+  color: inherit;
+}
+.node .label {
+  font-size: 11.5px;
+  font-weight: 600;
+  margin-bottom: 3px;
+  opacity: 0.92;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+.node .count {
+  font-size: 15.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.node .pct {
+  font-size: 10.5px;
+  opacity: 0.72;
+  margin-top: 2px;
+}
+
+svg.connectors {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+svg.connectors path {
+  stroke: #b8ccca;
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.caption {
+  font-size: 12.5px;
+  color: #5a7d7a;
+  line-height: 1.55;
+  margin: 12px 0 0;
+  padding: 0 4px;
+}

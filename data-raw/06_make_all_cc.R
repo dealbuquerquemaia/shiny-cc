@@ -30,8 +30,8 @@ if (file.exists("data-raw/03_prepare_SUS.R")) {
     #run_prepare_SUS()        # baixa + filtra + consolida
     #build_sia_cc_resumo()    # gera a base enxuta para o app
     #run_prepare_SIH_RD_EZT()
-    #build_sih_rd_ezt_resumo()
-      build_sus_proc_resumo(ano_ref = 2024L)  
+    build_sih_rd_ezt_resumo()
+    build_sus_proc_resumo(ano_ref = 2024L)  
       
     }
   )

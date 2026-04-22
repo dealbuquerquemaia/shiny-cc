@@ -642,7 +642,7 @@ build_sih_rd_ezt_resumo <- function(
 # Base SUS "resumo" (leve) para o app/BI — ano fixo (ex.: 2024)
 # - Sem ano/mês na base final (filtra no pré-processamento)
 # - Duas linhas por geo_id: care/res
-# - Métricas: total_all e total_25_69 (25–69)
+# - Métricas: total_all e total_25_64 (25–64)
 # - Já faz merge com regional_sus_map
 # - Anexa SIH-RD (EZT tipo 3) como categoria separada
 # Gera: data/sus_proc_resumo.rds
@@ -680,7 +680,7 @@ build_sus_proc_resumo <- function(
   reg_small <- reg[, ..keep_reg]
   
   # -----------------------------
-  # 2) SIA (aprovado) -> care/res + total_all / total_25_69
+  # 2) SIA (aprovado) -> care/res + total_all / total_25_64
   # -----------------------------
   sia <- readRDS(input_sia)
   data.table::setDT(sia)
@@ -696,18 +696,18 @@ build_sus_proc_resumo <- function(
     warning("SIA: nenhuma linha encontrada para ano_ref=", ano_ref)
   }
   
-  # Faixas 25–69 (como strings já padronizadas no build_sia_cc_resumo)
-  faixa_25_69 <- c("25-29","30-34","35-39","40-44","45-49","50-54","55-59","60-64","65-69")
+  # Faixas 25–64 (como strings já padronizadas no build_sia_cc_resumo)
+  faixa_25_64 <- c("25-29","30-34","35-39","40-44","45-49","50-54","55-59","60-64")
   
-  # Faixas 25–69 (como strings já padronizadas no build_sia_cc_resumo)
-  faixa_25_69 <- c("25-29","30-34","35-39","40-44","45-49","50-54","55-59","60-64","65-69")
+  # Faixas 25–64 (como strings já padronizadas no build_sia_cc_resumo)
+  faixa_25_64 <- c("25-29","30-34","35-39","40-44","45-49","50-54","55-59","60-64")
   
   # care (PA_UFMUN)
   sia_care <- sia[
     ,
     .(
       total_all   = sum(total_qtdapr, na.rm = TRUE),
-      total_25_69 = sum(data.table::fifelse(faixa_idade %in% faixa_25_69, total_qtdapr, 0), na.rm = TRUE)
+      total_25_64 = sum(data.table::fifelse(faixa_idade %in% faixa_25_64, total_qtdapr, 0), na.rm = TRUE)
     ),
     by = .(categoria, PA_PROC_ID, nome_procedimento, geo_id = PA_UFMUN)
   ]
@@ -718,7 +718,7 @@ build_sus_proc_resumo <- function(
     ,
     .(
       total_all   = sum(total_qtdapr, na.rm = TRUE),
-      total_25_69 = sum(data.table::fifelse(faixa_idade %in% faixa_25_69, total_qtdapr, 0), na.rm = TRUE)
+      total_25_64 = sum(data.table::fifelse(faixa_idade %in% faixa_25_64, total_qtdapr, 0), na.rm = TRUE)
     ),
     by = .(categoria, PA_PROC_ID, nome_procedimento, geo_id = PA_MUNPCN)
   ]
@@ -734,7 +734,7 @@ build_sus_proc_resumo <- function(
   
   
   # -----------------------------
-  # 3) SIH-RD (EZT tipo 3) -> care/res + total_all / total_25_69
+  # 3) SIH-RD (EZT tipo 3) -> care/res + total_all / total_25_64
   #    Entra como categoria = "tratamento"
   #    Mantém PA_PROC_ID e nome_procedimento (a partir de PROC_ID)
   # -----------------------------
@@ -760,7 +760,7 @@ build_sus_proc_resumo <- function(
       ,
       .(
         total_all   = sum(n_internacoes, na.rm = TRUE),
-        total_25_69 = sum(data.table::fifelse(faixa_idade %in% faixa_25_69, n_internacoes, 0), na.rm = TRUE)
+        total_25_64 = sum(data.table::fifelse(faixa_idade %in% faixa_25_64, n_internacoes, 0), na.rm = TRUE)
       ),
       by = .(PA_PROC_ID = PROC_ID, nome_procedimento, geo_id = MUNIC_MOV)
     ]
@@ -771,7 +771,7 @@ build_sus_proc_resumo <- function(
       ,
       .(
         total_all   = sum(n_internacoes, na.rm = TRUE),
-        total_25_69 = sum(data.table::fifelse(faixa_idade %in% faixa_25_69, n_internacoes, 0), na.rm = TRUE)
+        total_25_64 = sum(data.table::fifelse(faixa_idade %in% faixa_25_64, n_internacoes, 0), na.rm = TRUE)
       ),
       by = .(PA_PROC_ID = PROC_ID, nome_procedimento, geo_id = MUNIC_RES)
     ]
@@ -798,7 +798,7 @@ build_sus_proc_resumo <- function(
     "sistema","categoria","PA_PROC_ID","nome_procedimento",
     "geo_ref","geo_id",
     "UF","Macrorregiao de Saude","Regiao de Saude","Municipio",
-    "total_all","total_25_69"
+    "total_all","total_25_64"
   )
   col_order <- c(col_order, setdiff(names(out), col_order))
   data.table::setcolorder(out, col_order)

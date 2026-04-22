@@ -7,67 +7,64 @@
 
 mod_capacity_ui <- function(id) {
   ns <- NS(id)
-  
+
   tagList(
-    h3("Procedure delivery"),
-    h3(textOutput(ns("geo_desc"))),
-    
-    fluidRow(
-      column(
-        3,
-        cc_with_tt(
-          div(
-            class = "cc-kpi-card",
-            div(class = "cc-kpi-title", "Cytology"),
-            div(class = "cc-kpi-value", textOutput(ns("citologia_value"))),
-            div(class = "cc-kpi-subtitle", textOutput(ns("citologia_sub")))
-          ),
-          cc_TOOLTIPS$capacidade_ccu$citologia_total
-        )
-      ),
-      column(
-        3,
-        cc_with_tt(
-          div(
-            class = "cc-kpi-card",
-            div(class = "cc-kpi-title", "Colposcopy"),
-            div(class = "cc-kpi-value", textOutput(ns("colpo_value"))),
-            div(class = "cc-kpi-subtitle", textOutput(ns("colpo_sub")))
-          ),
-          cc_TOOLTIPS$capacidade_ccu$colposcopia_total
-        )
-      ),
-      column(
-        3,
-        cc_with_tt(
-          div(
-            class = "cc-kpi-card",
-            div(class = "cc-kpi-title", "Biopsies"),
-            div(class = "cc-kpi-value", textOutput(ns("biopsia_value"))),
-            div(class = "cc-kpi-subtitle", textOutput(ns("biopsia_sub")))
-          ),
-          cc_TOOLTIPS$capacidade_ccu$biopsia_total
-        )
-      ),
-      column(
-        3,
-        cc_with_tt(
-          div(
-            class = "cc-kpi-card",
-            div(class = "cc-kpi-title", "EZT"),
-            div(class = "cc-kpi-value", textOutput(ns("ezt_value"))),
-            div(class = "cc-kpi-subtitle", textOutput(ns("ezt_sub")))
-          ),
-          cc_TOOLTIPS$capacidade_ccu$ezt_total
+    div(
+      class = "cc-page-header",
+      div(class = "cc-page-title", "Capacity"),
+      div(class = "cc-page-subtitle", textOutput(ns("geo_desc")))
+    ),
+
+    # ── Section 1: Procedure delivery ──────────────────────────────────
+    div(
+      class = "ccu-section ccu-section-1",
+      uiOutput(ns("delivery_title")),
+      div(
+        class = "cards-ccu-wrap",
+
+        div(
+          class = "card-ccu",
+          title = cc_TOOLTIPS$capacidade_ccu$citologia_total,
+          HTML('<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v9l-4 6a1 1 0 0 0 .85 1.5h10.3A1 1 0 0 0 18 18l-4-6V3"/><line x1="8.5" y1="15" x2="15.5" y2="15"/></svg>'),
+          div(class = "card-ccu-label", "Cytology"),
+          div(class = "card-ccu-value", textOutput(ns("citologia_value"))),
+          div(class = "card-ccu-sub",   textOutput(ns("citologia_sub")))
+        ),
+
+        div(
+          class = "card-ccu",
+          title = cc_TOOLTIPS$capacidade_ccu$colposcopia_total,
+          HTML('<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="11" y1="8" x2="11" y2="14"/></svg>'),
+          div(class = "card-ccu-label", "Colposcopy"),
+          div(class = "card-ccu-value", textOutput(ns("colpo_value"))),
+          div(class = "card-ccu-sub",   textOutput(ns("colpo_sub")))
+        ),
+
+        div(
+          class = "card-ccu",
+          title = cc_TOOLTIPS$capacidade_ccu$biopsia_total,
+          HTML('<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="5" width="4" height="3" rx="0.8"/><line x1="12" y1="5" x2="12" y2="8"/><path d="M11.2 8 L8 17.8"/><path d="M12.8 8 L16 17.8"/><circle cx="8" cy="20" r="2.2"/><circle cx="16" cy="20" r="2.2"/></svg>'),
+          div(class = "card-ccu-label", "Biopsies"),
+          div(class = "card-ccu-value", textOutput(ns("biopsia_value"))),
+          div(class = "card-ccu-sub",   textOutput(ns("biopsia_sub")))
+        ),
+
+        div(
+          class = "card-ccu",
+          title = cc_TOOLTIPS$capacidade_ccu$ezt_total,
+          HTML('<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="4" y2="18"/><line x1="12" y1="4" x2="20" y2="18"/><ellipse cx="12" cy="18" rx="8" ry="2.5"/><line x1="12" y1="6" x2="12" y2="15.5" stroke-dasharray="1.8 2"/></svg>'),
+          div(class = "card-ccu-label", "EZT"),
+          div(class = "card-ccu-value", textOutput(ns("ezt_value"))),
+          div(class = "card-ccu-sub",   textOutput(ns("ezt_sub")))
         )
       )
     ),
-    
-    h3("Actual production vs. estimated need"),
+
+    # ── Section 2: Comparison ──────────────────────────────────────────
+    uiOutput(ns("comp_title")),
     uiOutput(ns("cap_comp_cards")),
     uiOutput(ns("cap_comp_note"))
-    )
-  
+  )
 }
 
 # ===========================================================
@@ -263,9 +260,9 @@ mod_capacity_server <- function(id,
       dt <- data.table::as.data.table(sia_cc_resumo)
       
       # Espera-se o novo dataset "sus_proc_resumo":
-      # geo_ref, categoria, total_all, total_25_69, e geografia já mergeada (UF/macro/reg/mun)
+      # geo_ref, categoria, total_all, total_25_64, e geografia já mergeada (UF/macro/reg/mun)
       needed <- c(
-        "geo_ref", "categoria", "total_all", "total_25_69",
+        "geo_ref", "categoria", "total_all", "total_25_64",
         "UF", "Macrorregiao de Saude", "Regiao de Saude", "Municipio"
       )
       miss <- setdiff(needed, names(dt))
@@ -320,12 +317,54 @@ mod_capacity_server <- function(id,
     # ---- KPI helpers -------------------------------------------------
     txt_na_val <- function() "–"
     txt_na_sub <- function() "Data not available – only Brazil (SUS, 2024)"
-    
+
     cap_sub <- function() {
       g <- input_global()
-      paste0("SUS/SIA 2024 — ", cap_geo_label(g))
+      paste0("SUS/SIA 2024 \u2014 ", cap_geo_label(g))
     }
-    
+
+    # Most specific geographic name without "Type: " prefix
+    geo_name_label <- function(g) {
+      pick_name <- function(x) {
+        if (is.null(x) || !length(x)) return(NULL)
+        x <- as.character(x[!is.na(x) & nzchar(x)])
+        if (!length(x)) return(NULL)
+        if (length(x) == 1L) x[1L] else paste0(x[1L], " (+", length(x) - 1L, ")")
+      }
+      pick_name(g$filt_mun)   %||%
+        pick_name(g$filt_reg)   %||%
+        pick_name(g$filt_macro) %||%
+        pick_name(g$filt_uf)
+    }
+
+    # Section 1 title (reactive)
+    output$delivery_title <- renderUI({
+      g   <- input_global()
+      geo <- geo_name_label(g)
+
+      suffix <- if (!isTRUE(is_brazil())) {
+        "SUS/SIA 2024"
+      } else if (!is.null(geo)) {
+        geo
+      } else {
+        pop_lbl <- if (isTRUE(g$br_pop_tipo == "sus")) "SUS-dependent" else "Total population"
+        paste0("Brazil \u00B7 ", pop_lbl)
+      }
+
+      div(class = "ccu-section-title",
+          paste0("Procedure delivery \u2014 ", suffix))
+    })
+
+    # Section 2 title (reactive)
+    output$comp_title <- renderUI({
+      g       <- input_global()
+      sia_ref <- g$sia_geo_ref %||% "care"
+      sia_lbl <- if (identical(sia_ref, "res")) "SIA by place of residence" else "SIA by place of care"
+
+      div(class = "cap-comp-section-title",
+          paste0("Actual production vs. estimated need \u2014 ", sia_lbl))
+    })
+
     output$citologia_value <- renderText({
       if (!is_brazil()) return(txt_na_val())
       c <- realized_cap()
@@ -371,67 +410,104 @@ mod_capacity_server <- function(id,
     })
     
     ######################Cards Comparativos###################################
-    
-    ratio_ui <- function(title, pct, sub) {
-      div(
-        class = "cc-kpi-card",
-        div(class = "cc-kpi-title", paste0(title, ":")),
-        div(class = "cc-kpi-value", pct),
-        div(class = "cc-kpi-subtitle", sub)
-      )
-    }
-    
+
+    # Returns list(pct, pct_num, sub) from comp_dt row
     ratio_vals <- function(d_all, item_name) {
-      if (is.null(d_all) || !nrow(d_all)) {
-        return(list(pct = "–", sub = "Data not available – only Brazil (SUS, 2024)"))
-      }
-      d <- d_all[item == item_name]
-      if (!nrow(d)) {
-        return(list(pct = "–", sub = "Data not available – only Brazil (SUS, 2024)"))
-      }
-      d <- d[1]
-      
-      pct <- if (is.na(d$coverage_percent)) "–" else paste0(fmt_rate(d$coverage_percent, 1), "%")
-      sub <- paste0(
-        "Actual production: ", if (is.na(d$realized)) "–" else fmt_int(d$realized),
-        " | Estimated need: ", if (is.na(d$needed)) "–" else fmt_int(d$needed)
+      na_result <- list(
+        pct     = "\u2013",
+        pct_num = NA_real_,
+        sub     = "Data not available \u2013 only Brazil (SUS, 2024)"
       )
-      
-      list(pct = pct, sub = sub)
+      if (is.null(d_all) || !nrow(d_all)) return(na_result)
+      d <- d_all[item == item_name]
+      if (!nrow(d)) return(na_result)
+      d <- d[1]
+
+      pct_num <- suppressWarnings(as.numeric(d$coverage_percent))
+      if (!is.finite(pct_num)) pct_num <- NA_real_
+
+      pct <- if (is.na(pct_num)) "\u2013" else paste0(fmt_rate(pct_num, 1), "%")
+
+      actual_str   <- if (is.na(d$realized))         "\u2013" else fmt_int(d$realized)
+      estimated_str <- if (is.na(d$needed))           "\u2013" else fmt_int(d$needed)
+      sub <- paste0("Actual: ", actual_str, " \u00B7 Estimated: ", estimated_str)
+
+      list(pct = pct, pct_num = pct_num, sub = sub)
     }
-    
-    output$cap_comp_cards <- renderUI({
-      if (!isTRUE(is_brazil())) {
-        return(
-          fluidRow(
-            column(3, cc_with_tt(ratio_ui("Cytology", "–", "Data not available – only Brazil (SUS, 2024)"),
-                                 cc_TOOLTIPS$capacidade_ccu$comp_citologia)),
-            column(3, cc_with_tt(ratio_ui("Colposcopy", "–", "Data not available – only Brazil (SUS, 2024)"),
-                                 cc_TOOLTIPS$capacidade_ccu$comp_colposcopia)),
-            column(3, cc_with_tt(ratio_ui("Biopsies", "–", "Data not available – only Brazil (SUS, 2024)"),
-                                 cc_TOOLTIPS$capacidade_ccu$comp_biopsia)),
-            column(3, cc_with_tt(ratio_ui("EZT", "–", "Data not available – only Brazil (SUS, 2024)"),
-                                 cc_TOOLTIPS$capacidade_ccu$comp_ezt))
-          )
-        )
+
+    # Renders the bar indicator div given a numeric percentage
+    bar_indicator <- function(pct_num) {
+      if (is.na(pct_num)) {
+        return(tagList(
+          div(class = "bar-outer",
+              div(class = "bar-fill", style = "width:0%;")),
+          div(class = "bar-labels", span("0%"), span("100%"))
+        ))
       }
-      
+      is_over   <- pct_num >= 100
+      fill_w    <- min(pct_num, 100)
+      fill_cls  <- if (pct_num < 50) "bar-fill-low" else if (pct_num < 100) "bar-fill-mid" else "bar-fill-ok"
+      br_r      <- if (is_over) "5px 0 0 5px" else "5px"
+
+      overflow_el <- if (is_over) {
+        div(class = "bar-overflow",
+          div(class = "bar-overflow-arrow"),
+          div(class = "bar-overflow-val", paste0(round(pct_num), "%"))
+        )
+      } else NULL
+
+      tagList(
+        div(
+          class = "bar-outer",
+          div(class = paste("bar-fill", fill_cls),
+              style = paste0("width:", fill_w, "%; border-radius:", br_r, ";")),
+          overflow_el
+        ),
+        div(class = "bar-labels", span("0%"), span("100%"))
+      )
+    }
+
+    # Builds one white comparison card
+    comp_card_ui <- function(title, rv, tooltip = NULL) {
+      div(
+        class = "comp-card",
+        title = tooltip,
+        div(class = "comp-title",  title),
+        div(class = "comp-pct",    rv$pct),
+        div(class = "comp-detail", HTML(rv$sub)),
+        bar_indicator(rv$pct_num)
+      )
+    }
+
+    output$cap_comp_cards <- renderUI({
+      na_rv <- list(
+        pct     = "\u2013",
+        pct_num = NA_real_,
+        sub     = "Data not available \u2013 only Brazil (SUS, 2024)"
+      )
+
+      if (!isTRUE(is_brazil())) {
+        return(div(
+          class = "comp-cards-row",
+          comp_card_ui("Cytology",   na_rv, cc_TOOLTIPS$capacidade_ccu$comp_citologia),
+          comp_card_ui("Colposcopy", na_rv, cc_TOOLTIPS$capacidade_ccu$comp_colposcopia),
+          comp_card_ui("Biopsies",   na_rv, cc_TOOLTIPS$capacidade_ccu$comp_biopsia),
+          comp_card_ui("EZT",        na_rv, cc_TOOLTIPS$capacidade_ccu$comp_ezt)
+        ))
+      }
+
       d_all <- comp_dt()
-      
       cy <- ratio_vals(d_all, "citologia_total")
       co <- ratio_vals(d_all, "colposcopia_total")
       bi <- ratio_vals(d_all, "biopsia_total")
       ez <- ratio_vals(d_all, "tratamento_total")
-      
-      fluidRow(
-        column(3, cc_with_tt(ratio_ui("Cytology", cy$pct, cy$sub),
-                             cc_TOOLTIPS$capacidade_ccu$comp_citologia)),
-        column(3, cc_with_tt(ratio_ui("Colposcopy", co$pct, co$sub),
-                             cc_TOOLTIPS$capacidade_ccu$comp_colposcopia)),
-        column(3, cc_with_tt(ratio_ui("Biopsies", bi$pct, bi$sub),
-                             cc_TOOLTIPS$capacidade_ccu$comp_biopsia)),
-        column(3, cc_with_tt(ratio_ui("EZT", ez$pct, ez$sub),
-                             cc_TOOLTIPS$capacidade_ccu$comp_ezt))
+
+      div(
+        class = "comp-cards-row",
+        comp_card_ui("Cytology",   cy, cc_TOOLTIPS$capacidade_ccu$comp_citologia),
+        comp_card_ui("Colposcopy", co, cc_TOOLTIPS$capacidade_ccu$comp_colposcopia),
+        comp_card_ui("Biopsies",   bi, cc_TOOLTIPS$capacidade_ccu$comp_biopsia),
+        comp_card_ui("EZT",        ez, cc_TOOLTIPS$capacidade_ccu$comp_ezt)
       )
     })
     output$cap_comp_note <- renderUI({
@@ -510,7 +586,7 @@ mod_capacity_server <- function(id,
       }
       
       div(
-        class = "ccu-note",
+        class = "cap-note",
         HTML(paste0(note_target, "<br/>", note_workup, "<br/>", note_trt))
       )
     })

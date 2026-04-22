@@ -17,6 +17,8 @@ data-raw/sia_cc_completo.rds
 *.feather
 *.parquet
 
+docs/
+
 # misc
 .DS_Store
 *.tmp

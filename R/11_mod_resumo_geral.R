@@ -6,8 +6,11 @@ mod_resumo_geral_ui <- function(id) {
   ns <- NS(id)
   
   tagList(
-    h3("Summary"),
-    h3(textOutput(ns("geo_desc"))),
+    div(
+      class = "cc-page-header",
+      div(class = "cc-page-title", "Summary"),
+      div(class = "cc-page-subtitle", textOutput(ns("geo_desc")))
+    ),
     uiOutput(ns("cards_resumo"))
   )
 }
@@ -80,7 +83,10 @@ mod_resumo_geral_server <- function(
       }
       
       parts <- c("Brazil")
-      
+
+      pop_tipo_label <- if (isTRUE(g$br_pop_tipo == "sus")) "SUS-dependent" else "Total population"
+      parts <- c(parts, pop_tipo_label)
+
       add_if <- function(x, prefix = NULL) {
         x <- if (is.null(x) || !length(x)) character(0) else as.character(x)
         x <- x[!is.na(x) & nzchar(x)]
@@ -131,7 +137,7 @@ mod_resumo_geral_server <- function(
       
       custom_pop <- NA_real_
       if (identical(pop_mode, "other")) {
-        custom_pop <- suppressWarnings(as.numeric(val_or(g$custom_pop_main, NA_real_)))
+        custom_pop <- suppressWarnings(as.numeric(val_or(g$custom_pop, NA_real_)))
       }
       
       is_br <- isTRUE(!is.na(country_code) && country_code == br_code)
@@ -221,19 +227,19 @@ mod_resumo_geral_server <- function(
     output$cards_resumo <- renderUI({
       dt <- dt_sum()
       tt <- cc_TOOLTIPS$resumo_geral_ccu
-      
+
       if (is.null(dt) || !nrow(dt)) {
         return(tags$div(
           div(style = "margin:6px; opacity:0.8;", "No data for the current selection.")
         ))
       }
-      
+
       s <- dt[1]
       method <- as.character(s$screen_method)
       if (!method %in% c("hpv", "cytology")) method <- "hpv"
-      
+
       g <- input_global()
-      
+
       num_or_na <- function(x) {
         x <- suppressWarnings(as.numeric(x))
         if (!is.finite(x) || is.na(x)) NA_real_ else x
@@ -242,155 +248,167 @@ mod_resumo_geral_server <- function(
         x <- num_or_na(x)
         if (is.na(x)) "NA" else sprintf("%.2f%%", x)
       }
-      
-      card <- function(title, value, tooltip = NULL, flex = "flex: 1 1 260px;") {
+
+      # SVG icons (22x22, stroke #fff, stroke-width 1.6)
+      ico_pop <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="18" cy="7" r="2.5"/><path d="M21 21v-1.5a3.5 3.5 0 0 0-2.5-3.35"/></svg>'
+      ico_cal <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><polyline points="9,14 11.2,16.5 15.5,12"/></svg>'
+      ico_tube <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v9l-4 6a1 1 0 0 0 .85 1.5h10.3A1 1 0 0 0 18 18l-4-6V3"/><line x1="8.5" y1="15" x2="15.5" y2="15"/></svg>'
+      ico_scope <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="11" y1="8" x2="11" y2="14"/></svg>'
+      ico_biopsy <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="5" width="4" height="3" rx="0.8"/><line x1="12" y1="5" x2="12" y2="8"/><path d="M11.2 8 L8 17.8"/><path d="M12.8 8 L16 17.8"/><circle cx="8" cy="20" r="2.2"/><circle cx="16" cy="20" r="2.2"/></svg>'
+      ico_cone <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="4" y2="18"/><line x1="12" y1="4" x2="20" y2="18"/><ellipse cx="12" cy="18" rx="8" ry="2.5"/><line x1="12" y1="6" x2="12" y2="15.5" stroke-dasharray="1.8 2"/></svg>'
+      ico_refresh <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>'
+
+      connector <- div(
+        class = "ccu-connector",
+        div(
+          class = "ccu-connector-arrow",
+          HTML('<svg viewBox="0 0 12 12" fill="none" stroke="#888" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,3 6,9 10,3"/></svg>')
+        )
+      )
+
+      card <- function(label, value, icon_svg = NULL, tooltip = NULL) {
         div(
           class = "card-ccu",
           title = tooltip,
-          style = flex,
-          div(style = "font-size:12px; opacity:0.9;", title),
-          div(style = "font-size:22px; font-weight:bold;", fmt_or_dash(value))
+          if (!is.null(icon_svg)) HTML(icon_svg),
+          div(class = "card-ccu-label", label),
+          div(class = "card-ccu-value", fmt_or_dash(value))
         )
       }
-      
-      
+
       # ---------------------------
       # Notes (English)
       # ---------------------------
-      age_txt <- sprintf("Ages %s–%s", fmt_or_dash(s$target_age_min), fmt_or_dash(s$target_age_max))
-      cov_txt <- sprintf("Coverage %s%%", fmt_or_dash(s$coverage_percent))
-      test_txt <- if (identical(method, "hpv")) "HPV every 5 years." else "Cytology every 3 years."
-      note_target <- paste(age_txt, cov_txt, test_txt, sep = "; ")
-      
+      age_txt  <- sprintf("Ages %s\u2013%s", fmt_or_dash(s$target_age_min), fmt_or_dash(s$target_age_max))
+      cov_txt  <- sprintf("Coverage %s%%", fmt_or_dash(s$coverage_percent))
+      test_txt <- if (identical(method, "hpv")) "HPV every 5 years" else "Cytology every 3 years"
+      note_target <- HTML(paste(age_txt, cov_txt, test_txt, sep = " &nbsp;&middot;&nbsp; "))
+
       if (identical(method, "hpv")) {
-        note_workup <- paste0(
-          "HPV test parameters: HPV 16/18+: ", pct2(g$p16_18),
-          "; Other HR-HPV+: ", pct2(g$poutros),
-          "; negative: ", pct2(g$pneg),
-          "; Other HR-HPV reflex cytology positivity: ", pct2(g$cito_out_pos), ".",
-          "<br/>",
-          "Colposcopy parameters: HPV 16/18+: ", pct2(g$colpo16_pos),
-          "; after other HR-HPV+: ", pct2(g$colpoout_pos), ".",
-          "<br/>",
-          "Follow-up HPV positivity = ", pct2(g$hpv_followup_pos_pct),
-          "; After treatment HPV tests at 6 and 18 months; all HPV-positive follow-up tests are referred to colposcopy."
-        )
-        
+        note_workup <- HTML(paste0(
+          "HPV 16/18+: ", pct2(g$p16_18),
+          " &nbsp;&middot;&nbsp; Other HR-HPV+: ", pct2(g$poutros),
+          " &nbsp;&middot;&nbsp; Negative: ", pct2(g$pneg),
+          " &nbsp;&middot;&nbsp; Reflex cytology positivity: ", pct2(g$cito_out_pos),
+          "<br/>Colposcopy positivity \u2013 HPV 16/18+: ", pct2(g$colpo16_pos),
+          " &nbsp;&middot;&nbsp; Other HR-HPV+: ", pct2(g$colpoout_pos)
+        ))
+
         cin2p_16  <- if (is.na(num_or_na(g$b16_nic23))) "NA" else sprintf("%.2f%%", num_or_na(g$b16_nic23))
         cin2p_out <- if (is.na(num_or_na(g$bo_nic23)))  "NA" else sprintf("%.2f%%", num_or_na(g$bo_nic23))
         can_16    <- if (is.na(num_or_na(g$b16_cancer))) "NA" else sprintf("%.2f%%", num_or_na(g$b16_cancer))
         can_out   <- if (is.na(num_or_na(g$bo_cancer)))  "NA" else sprintf("%.2f%%", num_or_na(g$bo_cancer))
-        
-        note_trt <- paste0(
-          "Biopsy positivity (CIN2+): HPV 16/18+ = ", cin2p_16,
-          "; after other HR-HPV+ = ", cin2p_out, ".",
-          "<br/>",
-          "Cancer: HPV 16/18+ = ", can_16,
-          "; after other HR-HPV+ = ", can_out, "."
-        )
-        
+
+        note_trt <- HTML(paste0(
+          "Biopsy positivity (CIN2+) \u2013 HPV 16/18+: ", cin2p_16,
+          " &nbsp;&middot;&nbsp; Other HR-HPV+: ", cin2p_out,
+          "<br/>Cancer \u2013 HPV 16/18+: ", can_16,
+          " &nbsp;&middot;&nbsp; Other HR-HPV+: ", can_out,
+          " &nbsp;&middot;&nbsp; Follow-up HPV positivity: ", pct2(g$hpv_followup_pos_pct)
+        ))
+
       } else {
-        note_workup <- paste0(
-          "Cytology volume parameters: first-time exams = ", pct2(g$first_time_pct),
-          "; unsatisfactory exams = ", pct2(g$unsatisfactory_pct), ".",
-          "<br/>",
-          "Cytology results: HSIL / ASC-H / AOI / AIS / Carcinoma = ", pct2(g$res_asch_pct),
-          "; other abnormalities = ", pct2(g$res_other_pct),
-          "; negative = ", pct2(g$res_neg_pct), ".",
-          "<br/>",
-          "Colposcopy referral: after HSIL / ASC-H / AOI / AIS / Carcinoma = ", pct2(g$colpo_asch_pct),
-          "; after other abnormalities = ", pct2(g$colpo_other_follow_pct), ".",
-          "<br/>",
-          "Colposcopy positivity (biopsy indication): HSIL / ASC-H / AOI / AIS / Carcinoma arm = ", pct2(g$biopsy_pos_asch_pct),
-          "; other abnormalities arm = ", pct2(g$biopsy_pos_other_pct), "."
-        )
-        
-        note_trt <- paste0(
-          "Biopsy outcomes (HSIL / ASC-H / AOI / AIS / Carcinoma arm): CIN2/3 = ", pct2(g$b_asch_nic23_pct),
-          "; cancer = ", pct2(g$b_asch_cancer_pct),
-          "; negative/CIN1 = ", pct2(g$b_asch_neg_nic1_pct), ".",
-          "<br/>",
-          "Biopsy outcomes (Other abnormalities arm): CIN2/3 = ", pct2(g$b_other_nic23_pct),
-          "; cancer = ", pct2(g$b_other_cancer_pct),
-          "; negative/CIN1 = ", pct2(g$b_other_neg_nic1_pct), ".",
-          "<br/>",
-          "Follow-up assumptions: EZT follow-up = 6 cytologies and 2 colposcopies per EZT."
-        )
+        note_workup <- HTML(paste0(
+          "First-time exams: ", pct2(g$first_time_pct),
+          " &nbsp;&middot;&nbsp; Unsatisfactory: ", pct2(g$unsatisfactory_pct),
+          "<br/>Results \u2013 HSIL/ASC-H/AOI/AIS/Ca: ", pct2(g$res_asch_pct),
+          " &nbsp;&middot;&nbsp; Other abnorm.: ", pct2(g$res_other_pct),
+          " &nbsp;&middot;&nbsp; Negative: ", pct2(g$res_neg_pct),
+          "<br/>Colposcopy referral \u2013 HSIL arm: ", pct2(g$colpo_asch_pct),
+          " &nbsp;&middot;&nbsp; Other arm: ", pct2(g$colpo_other_follow_pct),
+          "<br/>Colposcopy positivity \u2013 HSIL arm: ", pct2(g$biopsy_pos_asch_pct),
+          " &nbsp;&middot;&nbsp; Other arm: ", pct2(g$biopsy_pos_other_pct)
+        ))
+
+        note_trt <- HTML(paste0(
+          "Biopsy (HSIL arm) \u2013 CIN2/3: ", pct2(g$b_asch_nic23_pct),
+          " &nbsp;&middot;&nbsp; Cancer: ", pct2(g$b_asch_cancer_pct),
+          " &nbsp;&middot;&nbsp; Neg/CIN1: ", pct2(g$b_asch_neg_nic1_pct),
+          "<br/>Biopsy (Other arm) \u2013 CIN2/3: ", pct2(g$b_other_nic23_pct),
+          " &nbsp;&middot;&nbsp; Cancer: ", pct2(g$b_other_cancer_pct),
+          " &nbsp;&middot;&nbsp; Neg/CIN1: ", pct2(g$b_other_neg_nic1_pct),
+          "<br/>EZT follow-up: 6 cytologies and 2 colposcopies per EZT"
+        ))
       }
-      
+
       # =========================
       # 1) Target population
       # =========================
-      sec_target <- tags$div(
-        tags$h4(class = "ccu-section-title", "Target population"),
+      sec_target <- div(
+        class = "ccu-section ccu-section-1",
+        div(class = "ccu-section-title", "Target population"),
         div(
           class = "cards-ccu-wrap",
-          card("Selected population", s$pop_selected, tt$common$pop_selected, flex = "flex: 1 1 360px;"),
-          card("Screened per year",   s$screened_per_year, tt$common$screened_year, flex = "flex: 1 1 360px;")
+          card("Selected population", s$pop_selected,     ico_pop, tt$common$pop_selected),
+          card("Screened per year",   s$screened_per_year, ico_cal, tt$common$screened_year)
         ),
         div(class = "ccu-note", note_target)
       )
-      
+
       # =========================
       # 2) Work-up
       # =========================
       sec_workup <- if (identical(method, "hpv")) {
-        tags$div(
-          tags$h4(class = "ccu-section-title", "Work-up"),
+        div(
+          class = "ccu-section ccu-section-2",
+          div(class = "ccu-section-title", "Work-up"),
           div(
             class = "cards-ccu-wrap",
-            card("Reflex cytology",      s$cito_reflexa,     tt$hpv$cito_reflexa,     flex = "flex: 1 1 320px;"),
-            card("Colposcopy indicated", s$colpo_indicada,   tt$hpv$colpo_indicada,   flex = "flex: 1 1 320px;"),
-            card("Biopsy indicated",     s$biopsia_indicada, tt$hpv$biopsia_indicada, flex = "flex: 1 1 320px;")
+            card("Reflex cytology",      s$cito_reflexa,     ico_tube,   tt$hpv$cito_reflexa),
+            card("Colposcopy indicated", s$colpo_indicada,   ico_scope,  tt$hpv$colpo_indicada),
+            card("Biopsy indicated",     s$biopsia_indicada, ico_biopsy, tt$hpv$biopsia_indicada)
           ),
-          div(class = "ccu-note", HTML(note_workup))
+          div(class = "ccu-note", note_workup)
         )
       } else {
-        tags$div(
-          tags$h4(class = "ccu-section-title", "Work-up"),
+        div(
+          class = "ccu-section ccu-section-2",
+          div(class = "ccu-section-title", "Work-up"),
           div(
             class = "cards-ccu-wrap",
-            card("Diagnostic cytology", s$cit_diagnostica,   tt$cytology$cit_diagnostica,  flex = "flex: 1 1 320px;"),
-            card("Colposcopy",          s$colpo_indicada,    tt$cytology$colpo_indicada,   flex = "flex: 1 1 320px;"),
-            card("Biopsy",              s$biopsia_indicada,  tt$cytology$biopsia_indicada, flex = "flex: 1 1 320px;")
+            card("Diagnostic cytology", s$cit_diagnostica,  ico_tube,   tt$cytology$cit_diagnostica),
+            card("Colposcopy",          s$colpo_indicada,   ico_scope,  tt$cytology$colpo_indicada),
+            card("Biopsy",              s$biopsia_indicada, ico_biopsy, tt$cytology$biopsia_indicada)
           ),
-          div(class = "ccu-note", HTML(note_workup))
+          div(class = "ccu-note", note_workup)
         )
       }
-      
+
       # =========================
-      # 3) Treatment and follow up
+      # 3) Treatment and follow-up
       # =========================
       sec_trt <- if (identical(method, "hpv")) {
-        tags$div(
-          tags$h4(class = "ccu-section-title", "Treatment and follow up"),
+        div(
+          class = "ccu-section ccu-section-3",
+          div(class = "ccu-section-title", "Treatment and follow-up"),
           div(
             class = "cards-ccu-wrap",
-            card("Excision indicated (EZT)", s$ezt,              tt$hpv$ezt,               flex = "flex: 1 1 320px;"),
-            #card("Invasive Carcinoma",         s$alta_complexidade, tt$hpv$alta_complexidade, flex = "flex: 1 1 320px;"),
-            card("Follow-up HPV",        s$retorno_1ano,      tt$hpv$retorno_1ano,       flex = "flex: 1 1 320px;"), 
-            card("Follow-up colposcopy", s$followup_colposcopy, tt$hpv$followup_colposcopy, flex = "flex: 1 1 320px;")
+            card("Excision indicated (EZT)", s$ezt,                ico_cone,    tt$hpv$ezt),
+            card("Follow-up HPV",            s$retorno_1ano,       ico_refresh, tt$hpv$retorno_1ano),
+            card("Follow-up colposcopy",     s$followup_colposcopy, ico_scope,  tt$hpv$followup_colposcopy)
           ),
-          div(class = "ccu-note", HTML(note_trt))
+          div(class = "ccu-note", note_trt)
         )
       } else {
-        tags$div(
-          tags$h4(class = "ccu-section-title", "Treatment and follow up"),
+        div(
+          class = "ccu-section ccu-section-3",
+          div(class = "ccu-section-title", "Treatment and follow-up"),
           div(
             class = "cards-ccu-wrap",
-            card("Excision indicated (EZT)",  s$ezt,               tt$cytology$ezt,                flex = "flex: 1 1 320px;"),
-            card("Follow-up cytologies",  s$followup_cytologies,  (tt$cytology$followup_cytologies %||% NULL),  flex = "flex: 1 1 320px;"),
-            card("Follow-up colposcopies", s$followup_colposcopies, (tt$cytology$followup_colposcopies %||% NULL), flex = "flex: 1 1 320px;")
-            #,card("Invasive Carcinoma",        s$alta_complexidade, tt$cytology$alta_complexidade,  flex = "flex: 1 1 320px;")
+            card("Excision indicated (EZT)", s$ezt,                  ico_cone,    tt$cytology$ezt),
+            card("Follow-up cytologies",     s$followup_cytologies,  ico_tube,    (tt$cytology$followup_cytologies %||% NULL)),
+            card("Follow-up colposcopies",   s$followup_colposcopies, ico_scope,  (tt$cytology$followup_colposcopies %||% NULL))
           ),
-        
-          div(class = "ccu-note", HTML(note_trt))
+          div(class = "ccu-note", note_trt)
         )
       }
-      
-      tags$div(
+
+      div(
+        class = "ccu-flow",
         sec_target,
+        connector,
         sec_workup,
+        connector,
         sec_trt
       )
     })

@@ -23,7 +23,18 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
     # ================= POPULAÇÃO =================
     div(
       class = "cc-section cc-open",   # Population começa ABERTO
-      div(class = "cc-section-header", "Population"),
+      div(class = "cc-section-header",
+        tags$svg(xmlns="http://www.w3.org/2000/svg", viewBox="0 0 24 24",
+          width="14", height="14", fill="none", stroke="currentColor",
+          `stroke-width`="1.8", `stroke-linecap`="round", `stroke-linejoin`="round",
+          tags$circle(cx="9", cy="7", r="3"),
+          tags$path(d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"),
+          tags$circle(cx="18", cy="7", r="2.5"),
+          tags$path(d="M21 21v-1.5a3.5 3.5 0 0 0-3-3.5")
+        ),
+        "Population",
+        tags$span(class="cc-sec-chevron", "▼")
+      ),
       div(
         class = "cc-section-body",
         
@@ -36,7 +47,7 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
         radioButtons(
           ns("pop_mode"), "Source of population",
           choices = c(
-            "GLOBOCAN population"        = "globocan",
+            "World Population Prospects 2025"        = "globocan",
             "Other population (manual)"  = "other"
           ),
           selected = "globocan"
@@ -61,13 +72,8 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
           condition = sprintf("input['%s'] == 'other'", ns("pop_mode")),
           numericInput(
             ns("custom_pop_main"),
-            "Target population (main age group)",
+            "Target population",
             value = 100000, min = 0, step = 1000
-          ),
-          numericInput(
-            ns("custom_pop_second"),
-            "Target population (second age group, if any)",
-            value = NA, min = 0, step = 1000
           )
         ),
         
@@ -79,7 +85,6 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
           condition = sprintf("parseInt(input['%s']) == %d", ns("pais_sel"), br_code),
           tags$hr(),
           h5("Brazil – Geographic filters"),
-          helpText("Select by name. Each filter constrains the next ones."),
           radioButtons( ns("sia_geo_ref"), "SIA geographic reference (capacity module only)",
                         choices = c( "Place of care" = "care", "Place of residence" = "res"),
                         selected = "care"),
@@ -99,7 +104,16 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
     # ================= PROTOCOLO =================
     div(
       class = "cc-section",   # começa FECHADO
-      div(class = "cc-section-header", "Screening protocol"),
+      div(class = "cc-section-header",
+        tags$svg(xmlns="http://www.w3.org/2000/svg", viewBox="0 0 24 24",
+          width="14", height="14", fill="none", stroke="currentColor",
+          `stroke-width`="1.8", `stroke-linecap`="round", `stroke-linejoin`="round",
+          tags$path(d="M9 3h6v7l4 9H5l4-9V3"),
+          tags$line(x1="9", y1="9", x2="15", y2="9")
+        ),
+        "Screening protocol",
+        tags$span(class="cc-sec-chevron", "▼")
+      ),
       div(
         class = "cc-section-body",
         
@@ -155,85 +169,75 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
 
           conditionalPanel(
             condition = sprintf("input['%s'] == 'custom'", ns("hpv_param_source")),
-            tags$details(
-              class = "cc-subsection",
-              tags$summary(tags$strong("HPV pathway parameters")),
-
-              fluidRow(
-                column(6, checkboxInput(ns("lock_prop"), "Lock proportions while editing", value = TRUE)),
-                column(6, actionButton(ns("reset_params"), "Reset parameters", class = "btn-secondary"))
+            div(
+              class = "cc-param-area",
+              div(
+                class = "cc-param-area-toggle",
+                span(class = "cc-param-area-label",
+                  "HPV pathway parameters",
+                  tags$span(class = "cc-badge-customize", "customize")
+                ),
+                tags$span(class = "cc-param-area-chevron", "▼")
               ),
-              br(),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("HPV prevalence"),
-              fluidRow(
-                column(4, numericInput(ns("p16_18"), "HPV 16/18 (%)", value = round(HPV_DEFAULTS$p16_18, 2), min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("poutros"), "HPV other (%)", value = round(HPV_DEFAULTS$poutros, 2), min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("pneg"), "Negative (%)", value = round(HPV_DEFAULTS$pneg, 2), min = 0, max = 100, step = 0.01))
+              div(
+                class = "cc-param-area-body",
+                fluidRow(
+                  column(6, checkboxInput(ns("lock_prop"), "Lock proportions while editing", value = TRUE)),
+                  column(6, actionButton(ns("reset_params"), "Reset parameters", class = "btn-secondary"))
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "HPV prevalence"),
+                  fluidRow(
+                    column(4, numericInput(ns("p16_18"),  "HPV 16/18 (%)", value = round(HPV_DEFAULTS$p16_18, 2),  min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("poutros"), "HPV other (%)", value = round(HPV_DEFAULTS$poutros, 2), min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("pneg"),    "Negative (%)",  value = round(HPV_DEFAULTS$pneg, 2),    min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Cytology (HPV other)"),
+                  fluidRow(
+                    column(6, numericInput(ns("cito_out_pos"), "Positive (%)", value = round(HPV_DEFAULTS$cito_out_pos, 2), min = 0, max = 100, step = 0.01)),
+                    column(6, numericInput(ns("cito_out_neg"), "Negative (%)", value = round(HPV_DEFAULTS$cito_out_neg, 2), min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Colposcopy (HPV 16/18)"),
+                  fluidRow(
+                    column(6, numericInput(ns("colpo16_pos"), "Positive (%)", value = round(HPV_DEFAULTS$colpo16_pos, 2), min = 0, max = 100, step = 0.01)),
+                    column(6, numericInput(ns("colpo16_neg"), "Negative (%)", value = round(HPV_DEFAULTS$colpo16_neg, 2), min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Colposcopy (HPV other)"),
+                  fluidRow(
+                    column(6, numericInput(ns("colpoout_pos"), "Positive (%)", value = round(HPV_DEFAULTS$colpoout_pos, 2), min = 0, max = 100, step = 0.01)),
+                    column(6, numericInput(ns("colpoout_neg"), "Negative (%)", value = round(HPV_DEFAULTS$colpoout_neg, 2), min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Biopsy (HPV 16/18)"),
+                  fluidRow(
+                    column(4, numericInput(ns("b16_neg_nic1"), "Negative / CIN1 (%)", value = round(HPV_DEFAULTS$b16_neg_nic1, 2), min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("b16_nic23"),    "CIN2 / CIN3 (%)",     value = round(HPV_DEFAULTS$b16_nic23, 2),    min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("b16_cancer"),   "Cancer (%)",           value = round(HPV_DEFAULTS$b16_cancer, 2),   min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Biopsy (HPV other)"),
+                  fluidRow(
+                    column(4, numericInput(ns("bo_neg_nic1"), "Negative / CIN1 (%)", value = round(HPV_DEFAULTS$bo_neg_nic1, 2), min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("bo_nic23"),    "CIN2 / CIN3 (%)",     value = round(HPV_DEFAULTS$bo_nic23, 2),    min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("bo_cancer"),   "Cancer (%)",           value = round(HPV_DEFAULTS$bo_cancer, 2),   min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Follow-up HPV"),
+                  numericInput(ns("hpv_followup_pos_pct"), "HPV positivity at follow-up (%)",
+                    value = round(HPV_DEFAULTS$hpv_followup_pos_pct, 2), min = 0, max = 100, step = 0.01)
+                ),
+                uiOutput(ns("params_alert"))
               )
-            ),
-            
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Cytology result (HPV other)"),
-              fluidRow(
-                column(6, numericInput(ns("cito_out_pos"), "Positive (%)", value = round(HPV_DEFAULTS$cito_out_pos, 2), min = 0, max = 100, step = 0.01)),
-                column(6, numericInput(ns("cito_out_neg"), "Negative (%)", value = round(HPV_DEFAULTS$cito_out_neg, 2), min = 0, max = 100, step = 0.01))
-              )
-            ),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Colposcopy result (HPV 16/18)"),
-              fluidRow(
-                column(6, numericInput(ns("colpo16_pos"), "Positive (%)", value = round(HPV_DEFAULTS$colpo16_pos, 2), min = 0, max = 100, step = 0.01)),
-                column(6, numericInput(ns("colpo16_neg"), "Negative (%)", value = round(HPV_DEFAULTS$colpo16_neg, 2), min = 0, max = 100, step = 0.01))
-              )
-            ),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Colposcopy result (HPV other)"),
-              fluidRow(
-                column(6, numericInput(ns("colpoout_pos"), "Positive (%)", value = round(HPV_DEFAULTS$colpoout_pos, 2), min = 0, max = 100, step = 0.01)),
-                column(6, numericInput(ns("colpoout_neg"), "Negative (%)", value = round(HPV_DEFAULTS$colpoout_neg, 2), min = 0, max = 100, step = 0.01))
-              )
-            ),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Biopsy result (HPV 16/18)"),
-              fluidRow(
-                column(4, numericInput(ns("b16_neg_nic1"), "Negative / CIN1 (%)", value = round(HPV_DEFAULTS$b16_neg_nic1, 2), min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("b16_nic23"), "CIN2 / CIN3 (%)", value = round(HPV_DEFAULTS$b16_nic23, 2), min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("b16_cancer"), "Cancer (%)", value = round(HPV_DEFAULTS$b16_cancer, 2), min = 0, max = 100, step = 0.01))
-              )
-            ),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Biopsy result (HPV other)"),
-              fluidRow(
-                column(4, numericInput(ns("bo_neg_nic1"), "Negative / CIN1 (%)", value = round(HPV_DEFAULTS$bo_neg_nic1, 2), min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("bo_nic23"), "CIN2 / CIN3 (%)", value = round(HPV_DEFAULTS$bo_nic23, 2), min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("bo_cancer"), "Cancer (%)", value = round(HPV_DEFAULTS$bo_cancer, 2), min = 0, max = 100, step = 0.01))
-              )
-            ),
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Follow-up HPV"),
-              numericInput(
-                ns("hpv_followup_pos_pct"),
-                "HPV positivity at follow-up (%)",
-                value = round(HPV_DEFAULTS$hpv_followup_pos_pct, 2),
-                min = 0, max = 100, step = 0.01
-              )
-            ),
-            uiOutput(ns("params_alert"))
-            )   # fecha tags$details
+            )
           )     # fecha conditionalPanel(hpv_param_source == custom)
         ),      # fecha conditionalPanel(screen_method == hpv)
 
@@ -257,75 +261,70 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
 
           conditionalPanel(
             condition = sprintf("input['%s'] == 'custom'", ns("cito_param_source")),
-            tags$details(
-              class = "cc-subsection",
-              tags$summary(tags$strong("Cytology pathway parameters")),
-
-              fluidRow(
-                column(6, checkboxInput(ns("lock_prop_cito"), "Lock proportions while editing", value = TRUE)),
-                column(6, actionButton(ns("reset_params_cito"), "Reset parameters", class = "btn-secondary"))
+            div(
+              class = "cc-param-area",
+              div(
+                class = "cc-param-area-toggle",
+                span(class = "cc-param-area-label",
+                  "Cytology pathway parameters",
+                  tags$span(class = "cc-badge-customize", "customize")
+                ),
+                tags$span(class = "cc-param-area-chevron", "▼")
               ),
-              br(),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Exam volume"),
-              fluidRow(
-                column(6, numericInput(ns("first_time_pct"), "First-time exams (annual repeat) (%)", value = CITO_DEFAULTS$first_time_pct, min = 0, max = 100, step = 0.01)),
-                column(6, numericInput(ns("unsatisfactory_pct"), "Unsatisfactory exams (%)", value = CITO_DEFAULTS$unsatisfactory_pct, min = 0, max = 100, step = 0.01))
+              div(
+                class = "cc-param-area-body",
+                fluidRow(
+                  column(6, checkboxInput(ns("lock_prop_cito"), "Lock proportions while editing", value = TRUE)),
+                  column(6, actionButton(ns("reset_params_cito"), "Reset parameters", class = "btn-secondary"))
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Exam volume"),
+                  fluidRow(
+                    column(6, numericInput(ns("first_time_pct"),     "First-time exams (%)",   value = CITO_DEFAULTS$first_time_pct,     min = 0, max = 100, step = 0.01)),
+                    column(6, numericInput(ns("unsatisfactory_pct"), "Unsatisfactory (%)",     value = CITO_DEFAULTS$unsatisfactory_pct, min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Cytology result"),
+                  fluidRow(
+                    column(4, numericInput(ns("res_asch_pct"),  "HSIL / ASC-H / AIS / Ca (%)", value = CITO_DEFAULTS$res_asch_pct,  min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("res_other_pct"), "Other abnormal (%)",          value = CITO_DEFAULTS$res_other_pct, min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("res_neg_pct"),   "Negative (%)",                value = CITO_DEFAULTS$res_neg_pct,   min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Colposcopy referral"),
+                  fluidRow(
+                    column(6, numericInput(ns("colpo_asch_pct"),         "After HSIL arm (%)",        value = CITO_DEFAULTS$colpo_asch_pct,         min = 0, max = 100, step = 0.01)),
+                    column(6, numericInput(ns("colpo_other_follow_pct"), "After other abnormal (%)",  value = CITO_DEFAULTS$colpo_other_follow_pct, min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Colposcopy positivity"),
+                  fluidRow(
+                    column(6, numericInput(ns("biopsy_pos_asch_pct"),  "HSIL arm (%)",        value = CITO_DEFAULTS$biopsy_pos_asch_pct,  min = 0, max = 100, step = 0.01)),
+                    column(6, numericInput(ns("biopsy_pos_other_pct"), "Other abnormal (%)",  value = CITO_DEFAULTS$biopsy_pos_other_pct, min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Biopsy (HSIL arm)"),
+                  fluidRow(
+                    column(4, numericInput(ns("b_asch_neg_nic1_pct"), "Negative / CIN1 (%)", value = CITO_DEFAULTS$b_asch_neg_nic1_pct, min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("b_asch_nic23_pct"),    "CIN2 / CIN3 (%)",     value = CITO_DEFAULTS$b_asch_nic23_pct,    min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("b_asch_cancer_pct"),   "Cancer (%)",          value = CITO_DEFAULTS$b_asch_cancer_pct,   min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                div(class = "cc-param-group",
+                  div(class = "cc-param-group-title", "Biopsy (other arm)"),
+                  fluidRow(
+                    column(4, numericInput(ns("b_other_neg_nic1_pct"), "Negative / CIN1 (%)", value = CITO_DEFAULTS$b_other_neg_nic1_pct, min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("b_other_nic23_pct"),    "CIN2 / CIN3 (%)",     value = CITO_DEFAULTS$b_other_nic23_pct,    min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("b_other_cancer_pct"),   "Cancer (%)",          value = CITO_DEFAULTS$b_other_cancer_pct,   min = 0, max = 100, step = 0.01))
+                  )
+                ),
+                uiOutput(ns("params_alert_cito"))
               )
-            ),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Cytology result"),
-              fluidRow(
-                column(4, numericInput(ns("res_asch_pct"),  "HSIL / ASC-H / AOI / AIS / Carcinoma (%)", value = CITO_DEFAULTS$res_asch_pct,  min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("res_other_pct"), "Other abnormalities (%)", value = CITO_DEFAULTS$res_other_pct, min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("res_neg_pct"),   "Negative (%)", value = CITO_DEFAULTS$res_neg_pct,   min = 0, max = 100, step = 0.01))
-              )
-            ),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Colposcopy referral"),
-              fluidRow(
-                column(6, numericInput(ns("colpo_asch_pct"), "Colposcopy after HSIL / ASC-H / AOI / AIS / Carcinoma (%)", value = CITO_DEFAULTS$colpo_asch_pct, min = 0, max = 100, step = 0.01)),
-                column(6, numericInput(ns("colpo_other_follow_pct"), "Colposcopy after other abnormalities (%)", value = CITO_DEFAULTS$colpo_other_follow_pct, min = 0, max = 100, step = 0.01))
-              )
-            ),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Colposcopy positivity"),
-              fluidRow(
-                column(6, numericInput(ns("biopsy_pos_asch_pct"), "HSIL / ASC-H / AOI / AIS / Carcinoma arm (%)", value = CITO_DEFAULTS$biopsy_pos_asch_pct, min = 0, max = 100, step = 0.01)),
-                column(6, numericInput(ns("biopsy_pos_other_pct"), "Other abnormalities arm (%)", value = CITO_DEFAULTS$biopsy_pos_other_pct, min = 0, max = 100, step = 0.01))
-              )
-            ),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Biopsy result (HSIL / ASC-H / AOI / AIS / Carcinoma arm; among positive biopsies)"),
-              fluidRow(
-                column(4, numericInput(ns("b_asch_neg_nic1_pct"), "Negative / CIN1 (%)", value = CITO_DEFAULTS$b_asch_neg_nic1_pct, min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("b_asch_nic23_pct"),    "CIN2 / CIN3 (%)",     value = CITO_DEFAULTS$b_asch_nic23_pct,    min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("b_asch_cancer_pct"),   "Cancer (%)",          value = CITO_DEFAULTS$b_asch_cancer_pct,   min = 0, max = 100, step = 0.01))
-              )
-            ),
-            
-            tags$div(
-              style="border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;",
-              h4("Biopsy result (Other abnormalities arm; among positive biopsies)"),
-              fluidRow(
-                column(4, numericInput(ns("b_other_neg_nic1_pct"), "Negative / CIN1 (%)", value = CITO_DEFAULTS$b_other_neg_nic1_pct, min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("b_other_nic23_pct"),    "CIN2 / CIN3 (%)",     value = CITO_DEFAULTS$b_other_nic23_pct,    min = 0, max = 100, step = 0.01)),
-                column(4, numericInput(ns("b_other_cancer_pct"),   "Cancer (%)",          value = CITO_DEFAULTS$b_other_cancer_pct,   min = 0, max = 100, step = 0.01))
-              )
-            ),
-            
-            uiOutput(ns("params_alert_cito"))
-            )   # fecha tags$details
+            )
           )     # fecha conditionalPanel(cito_param_source == custom)
         )       # fecha conditionalPanel(screen_method == cytology)
 
@@ -339,7 +338,16 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
     # ================= COBERTURA =================
     div(
       class = "cc-section",
-      div(class = "cc-section-header", "Screening coverage"),
+      div(class = "cc-section-header",
+        tags$svg(xmlns="http://www.w3.org/2000/svg", viewBox="0 0 24 24",
+          width="14", height="14", fill="none", stroke="currentColor",
+          `stroke-width`="1.8", `stroke-linecap`="round", `stroke-linejoin`="round",
+          tags$path(d="M22 11.08V12a10 10 0 1 1-5.93-9.14"),
+          tags$polyline(points="22 4 12 14.01 9 11.01")
+        ),
+        "Screening coverage",
+        tags$span(class="cc-sec-chevron", "▼")
+      ),
       div(
         class = "cc-section-body",
         sliderInput(
@@ -355,14 +363,21 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
     # ================= RECURSOS / CAPACIDADES ==============
     div(
       class = "cc-section",
-      div(class = "cc-section-header", "Resources"),
+      div(class = "cc-section-header",
+        tags$svg(xmlns="http://www.w3.org/2000/svg", viewBox="0 0 24 24",
+          width="14", height="14", fill="none", stroke="currentColor",
+          `stroke-width`="1.8", `stroke-linecap`="round", `stroke-linejoin`="round",
+          tags$rect(x="2", y="7", width="20", height="14", rx="2", ry="2"),
+          tags$path(d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16")
+        ),
+        "Resources",
+        tags$span(class="cc-sec-chevron", "▼")
+      ),
       div(
         class = "cc-section-body",
         
-        tags$details(
-          class = "cc-subsection",
-          tags$summary(tags$strong("Capacities")),
-          
+        
+
           radioButtons(
             ns("cap_unidade"),
             "Capacity unit:",
@@ -371,36 +386,19 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
             inline   = TRUE
           ),
           helpText("Conversions: 1 week = 5 days; 1 month = 4 weeks; 1 year = 12 months."),
-          
-          numericInput(
-            ns("cap_colposcopio"),
-            "Colposcope (procedures per unit)",
-            value = 5760, min = 1, step = 1
+
+          div(class = "cc-param-group",
+            div(class = "cc-param-group-title", "Colposcopy"),
+            numericInput(ns("cap_colposcopio"),   "Colposcope (procedures/unit)",          value = 5760, min = 1, step = 1),
+            numericInput(ns("cap_colposcopista"), "Colposcopist 20h/wk (procedures/unit)", value = 2880, min = 1, step = 1)
           ),
-          
-          
-          numericInput(
-            ns("cap_colposcopista"),
-            "Colposcopist physician (20h/week) — procedures per unit",
-            value = 2880, min = 1, step = 1
-          ),
-          
-          
-          numericInput(
-            ns("cap_citopato"),
-            "Cytopathologist — slides per unit",
-            value = 14400, min = 1, step = 1
-          ),
-          
-          
-          numericInput(
-            ns("cap_patologista"),
-            "Pathologist (20h/week) — slides per unit",
-            value = 7200, min = 1, step = 1
+          div(class = "cc-param-group",
+            div(class = "cc-param-group-title", "Pathology"),
+            numericInput(ns("cap_citopato"),    "Cytopathologist (slides/unit)",     value = 14400, min = 1, step = 1),
+            numericInput(ns("cap_patologista"), "Pathologist 20h/wk (slides/unit)",  value = 7200,  min = 1, step = 1)
           )
-          
         )
-      )
+      
     ))
     
 }
@@ -412,6 +410,7 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
 
 mod_filters_cc_server <- function(id,
                                   pop_municipio_regional = NULL,
+                                  cito_presets           = NULL,
                                   br_code = 1001L) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -611,22 +610,17 @@ mod_filters_cc_server <- function(id,
     load_cito_preset <- function() {
       src <- input$cito_param_source
       if (is.null(src) || identical(src, "custom")) return()
-
-      if (!exists("cito_presets", inherits = TRUE)) return()
-      presets <- get("cito_presets", inherits = TRUE)
-      if (!src %in% names(presets)) return()
-
-      meta <- if (exists("CITO_PRESETS_META", inherits = TRUE))
+      if (is.null(cito_presets) || !src %in% names(cito_presets)) return()
+      
+      meta    <- if (exists("CITO_PRESETS_META", inherits = TRUE))
         get("CITO_PRESETS_META", inherits = TRUE) else list()
-
-      por_uf <- isTRUE(meta[[src]]$por_uf)
-
-      uf_sel <- input$filt_uf
-      uf_key <- if (por_uf && length(uf_sel) == 1L) uf_sel else "brasil"
-
-      fonte <- presets[[src]]
-      p <- if (uf_key %in% names(fonte)) fonte[[uf_key]] else fonte[["brasil"]]
-
+      por_uf  <- isTRUE(meta[[src]]$por_uf)
+      uf_sel  <- input$filt_uf
+      uf_key  <- if (por_uf && length(uf_sel) == 1L) uf_sel else "brasil"
+      
+      fonte <- cito_presets[[src]]
+      p     <- if (uf_key %in% names(fonte)) fonte[[uf_key]] else fonte[["brasil"]]
+      
       for (nm in names(p)) {
         updateNumericInput(session, nm, value = round(p[[nm]], 3))
       }
