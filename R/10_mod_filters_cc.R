@@ -42,7 +42,7 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
           ns("pais_sel"), "Country / population",
           choices  = setNames(dim_country$population_code,
                               dim_country$population_name),
-          selected = 1001
+          selected = br_code
         ),
         radioButtons(
           ns("pop_mode"), "Source of population",

@@ -10,53 +10,52 @@ mod_maps_ui <- function(id) {
 
   tagList(
     div(
-      class = "cc-page-header",
-      div(class = "cc-page-title", "Maps")
-    ),
-    # Controls bar
-    div(
-      class = "map-controls-bar",
-      fluidRow(
-        column(3,
-          selectInput(ns("metric"), "Metric",
+      class = "maps-header",
+      div(class = "maps-header-title", "Maps"),
+      div(
+        class = "maps-header-controls",
+        div(
+          class = "maps-header-field",
+          tags$label("Metric", `for` = ns("metric")),
+          selectInput(ns("metric"), NULL,
             choices = c(
               "Cytology"         = "citologia",
-              "Collection"       = "coleta",
+              
               "Colposcopy"       = "colposcopia",
               "Biopsy"           = "biopsia",
               "Anatomopathology" = "anatomo",
               "EZT / treatment"  = "tratamento"
             ),
-            selected = "citologia"
+            selected = "citologia",
+            width = "180px"
           )
         ),
-        column(3,
-          selectInput(ns("granularity"), "Geographic level",
+        div(
+          class = "maps-header-field",
+          tags$label("Geographic level", `for` = ns("granularity")),
+          selectInput(ns("granularity"), NULL,
             choices = c(
-              "State (UF)"   = "estado",
-              "Macroregion"  = "macro",
-              "Health region"= "regiao",
-              "Municipality" = "municipio"
+              "State (UF)"    = "estado",
+              "Macroregion"   = "macro",
+              "Health region" = "regiao",
+              "Municipality"  = "municipio"
             ),
-            selected = "estado"
+            selected = "estado",
+            width = "180px"
           )
         ),
-        column(3,
-          div(
-            style = "padding-top: 25px;",
-            checkboxInput(ns("per100k"), "Per 100k women (25–64)", value = FALSE)
-          )
+        div(
+          class = "maps-header-check",
+          checkboxInput(ns("per100k"), "Per 100k women (25–64)", value = FALSE)
         ),
-        column(3,
-          div(
-            style = "padding-top: 26px; font-size: 11px; color: #888; line-height: 1.4;",
-            textOutput(ns("map_note"))
-          ),
-          uiOutput(ns("reset_btn_ui"))
+        div(
+          class = "maps-header-note",
+          textOutput(ns("map_note"), inline = TRUE),
+          uiOutput(ns("reset_btn_ui"), inline = TRUE)
         )
       )
     ),
-    leaflet::leafletOutput(ns("map"), height = "calc(100vh - 185px)")
+    leaflet::leafletOutput(ns("map"), height = "calc(100vh - 210px)")
   )
 }
 
@@ -132,6 +131,22 @@ mod_maps_server <- function(id,
       filter_vals = NULL
     )
 
+    # Sidebar change → reset drill (nova "âncora" geográfica)
+    observeEvent(
+      list(
+        input_global()$filt_uf,
+        input_global()$filt_macro,
+        input_global()$filt_reg
+      ),
+      {
+        drill$use         <- FALSE
+        drill$gran        <- NULL
+        drill$filter_col  <- NULL
+        drill$filter_vals <- NULL
+      },
+      ignoreInit = TRUE
+    )
+
     # ── Auto granularity from sidebar geographic filter ─────────────────────
     auto_geo <- reactive({
       g       <- input_global()
@@ -139,27 +154,29 @@ mod_maps_server <- function(id,
       mac_sel <- g$filt_macro %||% character(0)
       reg_sel <- g$filt_reg   %||% character(0)
 
+      # Drill-down (clique no mapa) tem prioridade máxima
+      if (isTRUE(drill$use)) {
+        return(list(
+          gran        = drill$gran,
+          filter_col  = drill$filter_col,
+          filter_vals = drill$filter_vals
+        ))
+      }
+
+      # Filtro da sidebar (do mais específico para o mais geral)
       if (length(reg_sel) > 0L) {
-        # Region selected → show municipalities of those regions
         list(gran = "municipio", filter_col = "regiao_nome", filter_vals = reg_sel)
 
       } else if (length(mac_sel) > 0L) {
-        # Macroregion selected → show health regions of those macros
-        # geo_reg_wgs has no macro_nome, so resolve via code lookup
         mac_codes <- mac_nome_to_codigo[macro_nome %in% mac_sel, macro_codigo]
         reg_codes <- mac_to_reg[macro_codigo %in% mac_codes, unique(regiao_codigo)]
         list(gran = "regiao", filter_col = "regiao_codigo", filter_vals = reg_codes)
 
       } else if (length(uf_sel) > 0L) {
-        # UF selected → show macroregions of those states
         list(gran = "macro", filter_col = "uf_sigla", filter_vals = uf_sel)
 
-      } else if (drill$use) {
-        # No sidebar filter active — use local drill-down state
-        list(gran = drill$gran, filter_col = drill$filter_col, filter_vals = drill$filter_vals)
-
       } else {
-        # No filter at all — use manual granularity selector
+        # Sem filtro algum → seletor manual de granularidade
         list(gran = input$granularity %||% "estado", filter_col = NULL, filter_vals = NULL)
       }
     })
@@ -328,7 +345,7 @@ mod_maps_server <- function(id,
     output$reset_btn_ui <- renderUI({
       if (!drill$use) return(NULL)
       actionButton(
-        session$ns("reset_drill"), "\u2191 Reset zoom",
+        session$ns("reset_drill"), "↑ Reset zoom",
         style = paste(
           "font-size:11px; padding:2px 8px; margin-top:4px;",
           "background:#f0f0f0; border:1px solid #ccc; border-radius:4px;",
@@ -347,14 +364,14 @@ mod_maps_server <- function(id,
                      length(g$filt_macro %||% character(0)) > 0L ||
                      length(g$filt_reg   %||% character(0)) > 0L
 
-      suffix <- if (has_sidebar) {
-        " \u00b7 level auto-set by geographic filter"
-      } else if (drill$use) {
-        " \u00b7 click to drill down"
+      suffix <- if (drill$use) {
+        " · drill-down active · click to zoom further"
+      } else if (has_sidebar) {
+        " · level auto-set by sidebar · click to zoom"
       } else {
-        " \u00b7 click a polygon to drill down"
+        " · click a polygon to drill down"
       }
-      paste0("SIA 2024 \u2014 ", ref_lbl, suffix)
+      paste0("SIA 2024 — ", ref_lbl, suffix)
     })
 
     # ── Choropleth ─────────────────────────────────────────────────────
@@ -387,15 +404,15 @@ mod_maps_server <- function(id,
 
       # Tooltip formatter
       fmt_val <- if (d$per100k) {
-        function(x) if (is.na(x) || !is.finite(x)) "\u2013" else sprintf("%.1f", x)
+        function(x) if (is.na(x) || !is.finite(x)) "–" else sprintf("%.1f", x)
       } else {
-        function(x) if (is.na(x) || !is.finite(x)) "\u2013" else
+        function(x) if (is.na(x) || !is.finite(x)) "–" else
           formatC(as.integer(round(x)), format = "d", big.mark = ",")
       }
 
       metric_label <- switch(d$metric,
         citologia   = "Cytology",
-        coleta      = "Collection",
+        
         colposcopia = "Colposcopy",
         biopsia     = "Biopsy",
         anatomo     = "Anatomopathology",
@@ -421,7 +438,7 @@ mod_maps_server <- function(id,
       })
 
       legend_title <- if (d$per100k)
-        paste(metric_label, "<br/>per 100k women (25\u201364)")
+        paste(metric_label, "<br/>per 100k women (25–64)")
       else
         paste(metric_label, "<br/>total (2024)")
 

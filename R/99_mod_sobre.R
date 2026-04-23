@@ -73,7 +73,7 @@ mod_sobre_ui <- function(id) {
               "International Agency for Research on Cancer (IARC)", br(),
               "Faculty of Public Health, University of São Paulo"
             ),
-            p(tags$strong("Version:"), "1.0"),
+            p(tags$strong("Version:"), "1.2"),
             p(tags$strong("Last update:"), format(Sys.Date(), "%d/%m/%Y")),
             p(tags$strong("Funding:"), "This research was supported by the São 
               Paulo Research Foundation, FAPESP. Grant numbers: 2025/08308-1; 

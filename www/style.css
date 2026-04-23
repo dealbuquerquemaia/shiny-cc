@@ -710,14 +710,48 @@
       }
 
       /* ── Maps tab ── */
-      .map-controls-bar{
-        background:#fff;
+      .maps-header{
+        display:flex;
+        align-items:flex-end;
+        justify-content:space-between;
+        gap:24px;
+        padding:10px 4px 10px;
+        margin-bottom:8px;
         border-bottom:1px solid #e4e4e4;
-        padding:8px 16px 4px;
-        margin:-15px -15px 0;
       }
-      .map-controls-bar .form-group{ margin-bottom:6px; }
-      .map-controls-bar label{ font-size:var(--t-xs); font-weight:600; color:#444; }
+      .maps-header-title{
+        font-size:var(--t-xxl);
+        font-weight:700;
+        color:var(--cc-text);
+        line-height:1.1;
+        flex:0 0 auto;
+      }
+      .maps-header-controls{
+        display:flex;
+        align-items:flex-end;
+        gap:16px;
+        flex:1 1 auto;
+        justify-content:flex-end;
+        flex-wrap:wrap;
+      }
+      .maps-header-field{ display:flex; flex-direction:column; min-width:0; }
+      .maps-header-field label{
+        font-size:var(--t-xs);
+        font-weight:600;
+        color:#444;
+        margin-bottom:2px;
+      }
+      .maps-header-field .form-group{ margin-bottom:0; }
+      .maps-header-check{ padding-bottom:6px; }
+      .maps-header-check .checkbox{ margin:0; }
+      .maps-header-note{
+        font-size:11px;
+        color:#888;
+        line-height:1.4;
+        max-width:240px;
+        text-align:right;
+        padding-bottom:6px;
+      }
 
 /* --- Tooltips globais (Bootstrap) ---------------------------------------- */
 
