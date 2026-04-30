@@ -1,24 +1,63 @@
 # ===========================================================
-# 17_mod_compare.R
-# Módulo Compare — comparação lado a lado de dois cenários
-#   Scenario A: configuração atual (input_global)
-#   Scenario B: configuração alternativa (inputs locais do módulo)
+# 17_mod_compare.R — aba "Compare"
+# -----------------------------------------------------------
+# Renderiza dois cenários lado a lado:
+#   • Scenario A — herda a configuração atual da sidebar (input_global)
+#   • Scenario B — usa um painel próprio (à direita) com inputs com sufixo "_b"
+#
+# Geografia (país + filtros Brasil) é COMPARTILHADA: B sempre herda de A.
+# Apenas População customizada (custom_pop) também é herdada — exibida read-only.
+# Cobertura, faixa etária, método e parâmetros são editáveis no painel B.
+#
+# Pipeline (server):
+#   input_global  ──► cfg_a ──► res_a ──► dt_a ─┐
+#   input$*_b     ──► cfg_b ──► res_b ──► dt_b ─┴──► tabela comparativa (Δ B vs A)
+#
+# UI:
+#   • compare-results    — header + scenario_badges + compare_table
+#   • scen-b-panel       — accordion (Population / Protocol / Coverage / Resources)
+#                          espelha a sidebar mas com IDs sufixados "_b"
+#
+# Padrões replicados de outros módulos:
+#   • val_or / fmt_or_dash         (idem 11/14/16) — candidatos a utils
+#   • get_*_preset_params          (espelha load_*_preset de 10_mod_filters_cc.R)
+#   • lock_pair_b / lock_triplet_b (espelha lock_pair/lock_triplet de 10)
+#   • cfg_a                         (espelha cfg de 11_mod_resumo_geral.R)
 # ===========================================================
 
 mod_compare_ui <- function(id) {
   ns <- NS(id)
 
+  # Layout em 2 colunas: resultados à esquerda, painel do Scenario B à direita
+  # (controle de largura em www/style.css → .compare-layout)
   div(
     class = "compare-layout",
 
-    # ── Painel Scenario B ──────────────────────────────────────────────
+    # ── Área de resultados (col. esquerda) ─────────────────────────────
+    div(
+      class = "compare-results",
+      div(
+        class = "cc-page-header",
+        div(class = "cc-page-title", "Compare"),
+        # Subtítulo dinâmico: descreve a geografia compartilhada (output abaixo)
+        div(class = "cc-page-subtitle", uiOutput(ns("result_desc")))
+      ),
+      # Badges resumindo método/idade/cobertura de A e B
+      uiOutput(ns("scenario_badges")),
+      # Tabela comparativa A | B | Δ B vs A
+      uiOutput(ns("compare_table"))
+    ),
+    # ── Painel Scenario B (col. direita) ───────────────────────────────
+    # Accordion paralelo à sidebar, mas só com o que é editável no cenário B.
+    # País / filtros Brasil ficam travados (geo_locked) — herdam de A.
     div(
       class = "scen-b-panel",
       div(class = "scen-b-header", "Scenario B"),
       div(class = "scen-b-subheader", "Geography is shared with Scenario A."),
-      uiOutput(ns("geo_locked")),
+      uiOutput(ns("geo_locked")),  # mostra a geografia herdada (read-only)
 
-      # Population
+      # ── Acordeão 1: Population ──────────────────────────────────────
+      # População é sempre herdada (GLOBOCAN ou custom_pop). Render no server.
       tags$details(
         class = "scen-b-acc", open = NA,
         tags$summary("Population"),
@@ -27,30 +66,35 @@ mod_compare_ui <- function(id) {
           uiOutput(ns("pop_b_ui"))
         )
       ),
-
-      # ── Screening protocol (com Customize) ──────────────────────────────
+      
+      # ── Acordeão 2: Screening protocol (com Customize) ─────────────
+      # Espelha 10_mod_filters_cc.R, mas com IDs sufixados "_b"
+      # e dois conditionalPanels que dependem de input$screen_method_b
       tags$details(
         class = "scen-b-acc", open = NA,
         tags$summary("Screening protocol"),
         div(
           class = "scen-b-acc-body",
 
+          # Método de rastreamento do cenário B
           radioButtons(ns("screen_method_b"), NULL,
-            choices  = c("HPV test" = "hpv", "Cytology" = "cytology"),
-            selected = "hpv"
+                       choices  = c("HPV test" = "hpv", "Cytology" = "cytology"),
+                       selected = "hpv"
           ),
           fluidRow(
             column(6, selectInput(ns("target_age_min_b"), "Age from",
-              choices  = c(20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70),
-              selected = 25
+                                  choices  = c(20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70),
+                                  selected = 25
             )),
             column(6, selectInput(ns("target_age_max_b"), "Age to",
-              choices  = c(24, 29, 34, 39, 44, 49, 54, 59, 64, 69, 74),
-              selected = 64
+                                  choices  = c(24, 29, 34, 39, 44, 49, 54, 59, 64, 69, 74),
+                                  selected = 64
             ))
           ),
-
-          # ── HPV: seletor de fonte + painel Customize ──────────────────────
+          
+          # ── HPV: seletor de fonte + painel Customize ────────────────────
+          # Choices construídas a partir de HPV_PRESETS (00_constants_cc.R) +
+          # opção "Customize" que abre o sub-painel com os 16 inputs HPV.
           conditionalPanel(
             condition = sprintf("input['%s'] == 'hpv'", ns("screen_method_b")),
             {
@@ -62,54 +106,60 @@ mod_compare_ui <- function(id) {
                            choices  = hpv_choices_b,
                            selected = names(HPV_PRESETS)[1])
             },
+            # Painel "Customize HPV" — só aparece quando fonte = custom
             conditionalPanel(
               condition = sprintf("input['%s'] == 'custom'", ns("hpv_param_source_b")),
               tags$div(
                 style = "border:1px solid #ddd; padding:10px; border-radius:8px; margin-top:8px; background:#fbfdfd;",
-
+                
                 fluidRow(
                   column(6, checkboxInput(ns("lock_prop_b"),   "Lock proportions", value = TRUE)),
                   column(6, actionButton(ns("reset_params_b"), "Reset", class = "btn-secondary btn-sm"))
                 ),
                 br(),
-
+                
                 h5("HPV prevalence"),
                 numericInput(ns("p16_18_b"),  "HPV 16/18 (%)",  value = round(HPV_DEFAULTS$p16_18,  2), min = 0, max = 100, step = 0.01),
                 numericInput(ns("poutros_b"), "HPV other (%)",  value = round(HPV_DEFAULTS$poutros, 2), min = 0, max = 100, step = 0.01),
                 numericInput(ns("pneg_b"),    "Negative (%)",   value = round(HPV_DEFAULTS$pneg,    2), min = 0, max = 100, step = 0.01),
-
+                
                 h5("Cytology result (HPV other)"),
                 numericInput(ns("cito_out_pos_b"), "Positive (%)", value = round(HPV_DEFAULTS$cito_out_pos, 2), min = 0, max = 100, step = 0.01),
                 numericInput(ns("cito_out_neg_b"), "Negative (%)", value = round(HPV_DEFAULTS$cito_out_neg, 2), min = 0, max = 100, step = 0.01),
-
+                
                 h5("Colposcopy (HPV 16/18)"),
                 numericInput(ns("colpo16_pos_b"), "Positive (%)", value = round(HPV_DEFAULTS$colpo16_pos, 2), min = 0, max = 100, step = 0.01),
                 numericInput(ns("colpo16_neg_b"), "Negative (%)", value = round(HPV_DEFAULTS$colpo16_neg, 2), min = 0, max = 100, step = 0.01),
-
+                
                 h5("Colposcopy (HPV other)"),
                 numericInput(ns("colpoout_pos_b"), "Positive (%)", value = round(HPV_DEFAULTS$colpoout_pos, 2), min = 0, max = 100, step = 0.01),
                 numericInput(ns("colpoout_neg_b"), "Negative (%)", value = round(HPV_DEFAULTS$colpoout_neg, 2), min = 0, max = 100, step = 0.01),
-
+                
                 h5("Biopsy (HPV 16/18)"),
                 numericInput(ns("b16_neg_nic1_b"), "Negative / CIN1 (%)", value = round(HPV_DEFAULTS$b16_neg_nic1, 2), min = 0, max = 100, step = 0.01),
                 numericInput(ns("b16_nic23_b"),    "CIN2 / CIN3 (%)",     value = round(HPV_DEFAULTS$b16_nic23,    2), min = 0, max = 100, step = 0.01),
                 numericInput(ns("b16_cancer_b"),   "Cancer (%)",          value = round(HPV_DEFAULTS$b16_cancer,   2), min = 0, max = 100, step = 0.01),
-
+                
                 h5("Biopsy (HPV other)"),
                 numericInput(ns("bo_neg_nic1_b"), "Negative / CIN1 (%)", value = round(HPV_DEFAULTS$bo_neg_nic1, 2), min = 0, max = 100, step = 0.01),
                 numericInput(ns("bo_nic23_b"),    "CIN2 / CIN3 (%)",     value = round(HPV_DEFAULTS$bo_nic23,    2), min = 0, max = 100, step = 0.01),
                 numericInput(ns("bo_cancer_b"),   "Cancer (%)",          value = round(HPV_DEFAULTS$bo_cancer,   2), min = 0, max = 100, step = 0.01),
-
+                
                 h5("Follow-up HPV"),
                 numericInput(ns("hpv_followup_pos_pct_b"), "HPV positivity at follow-up (%)",
                              value = round(HPV_DEFAULTS$hpv_followup_pos_pct, 2), min = 0, max = 100, step = 0.01),
-
+                
                 uiOutput(ns("params_alert_b"))
               )
             )
           ),
-
-          # ── Citologia: seletor de fonte + painel Customize ────────────────
+          
+          # ── Citologia: seletor de fonte + painel Customize ──────────────
+          # Choices a partir de CITO_PRESETS_META (00_constants_cc.R) — flag
+          # `por_uf` controla se a fonte aceita filtragem por UF (ex.: SISCAN).
+          # Nota: cenário B NÃO permite escolher UF independente — a UF é
+          # herdada de A, e get_cito_preset_params() resolve para "brasil"
+          # quando 0 ou >1 UFs estão selecionadas (mesmo fallback de 10).
           conditionalPanel(
             condition = sprintf("input['%s'] == 'cytology'", ns("screen_method_b")),
             {
@@ -121,73 +171,77 @@ mod_compare_ui <- function(id) {
                            choices  = cito_choices_b,
                            selected = names(CITO_PRESETS_META)[1])
             },
+            # Painel "Customize Cytology" — só aparece quando fonte = custom
             conditionalPanel(
               condition = sprintf("input['%s'] == 'custom'", ns("cito_param_source_b")),
               tags$div(
                 style = "border:1px solid #ddd; padding:10px; border-radius:8px; margin-top:8px; background:#fbfdfd;",
-
+                
                 fluidRow(
                   column(6, checkboxInput(ns("lock_prop_cito_b"),   "Lock proportions", value = TRUE)),
                   column(6, actionButton(ns("reset_params_cito_b"), "Reset", class = "btn-secondary btn-sm"))
                 ),
                 br(),
-
+                
                 h5("Exam volume"),
                 numericInput(ns("first_time_pct_b"),     "First-time exams (%)",    value = CITO_DEFAULTS$first_time_pct,     min = 0, max = 100, step = 0.01),
                 numericInput(ns("unsatisfactory_pct_b"), "Unsatisfactory (%)",      value = CITO_DEFAULTS$unsatisfactory_pct, min = 0, max = 100, step = 0.01),
-
+                
                 h5("Cytology result"),
                 numericInput(ns("res_asch_pct_b"),  "HSIL / ASC-H / AOI / AIS / Ca (%)", value = CITO_DEFAULTS$res_asch_pct,  min = 0, max = 100, step = 0.01),
                 numericInput(ns("res_other_pct_b"), "Other abnormalities (%)",           value = CITO_DEFAULTS$res_other_pct, min = 0, max = 100, step = 0.01),
                 numericInput(ns("res_neg_pct_b"),   "Negative (%)",                      value = CITO_DEFAULTS$res_neg_pct,   min = 0, max = 100, step = 0.01),
-
+                
                 h5("Colposcopy referral"),
                 numericInput(ns("colpo_asch_pct_b"),         "After HSIL / ASC-H / AOI / AIS / Ca (%)", value = CITO_DEFAULTS$colpo_asch_pct,         min = 0, max = 100, step = 0.01),
                 numericInput(ns("colpo_other_follow_pct_b"), "After other abnormalities (%)",           value = CITO_DEFAULTS$colpo_other_follow_pct, min = 0, max = 100, step = 0.01),
-
+                
                 h5("Colposcopy positivity"),
                 numericInput(ns("biopsy_pos_asch_pct_b"),  "HSIL / ASC-H arm (%)",       value = CITO_DEFAULTS$biopsy_pos_asch_pct,  min = 0, max = 100, step = 0.01),
                 numericInput(ns("biopsy_pos_other_pct_b"), "Other abnormalities arm (%)", value = CITO_DEFAULTS$biopsy_pos_other_pct, min = 0, max = 100, step = 0.01),
-
+                
                 h5("Biopsy result (HSIL / ASC-H arm)"),
                 numericInput(ns("b_asch_neg_nic1_pct_b"), "Negative / CIN1 (%)", value = CITO_DEFAULTS$b_asch_neg_nic1_pct, min = 0, max = 100, step = 0.01),
                 numericInput(ns("b_asch_nic23_pct_b"),    "CIN2 / CIN3 (%)",     value = CITO_DEFAULTS$b_asch_nic23_pct,    min = 0, max = 100, step = 0.01),
                 numericInput(ns("b_asch_cancer_pct_b"),   "Cancer (%)",          value = CITO_DEFAULTS$b_asch_cancer_pct,   min = 0, max = 100, step = 0.01),
-
+                
                 h5("Biopsy result (Other arm)"),
                 numericInput(ns("b_other_neg_nic1_pct_b"), "Negative / CIN1 (%)", value = CITO_DEFAULTS$b_other_neg_nic1_pct, min = 0, max = 100, step = 0.01),
                 numericInput(ns("b_other_nic23_pct_b"),    "CIN2 / CIN3 (%)",     value = CITO_DEFAULTS$b_other_nic23_pct,    min = 0, max = 100, step = 0.01),
                 numericInput(ns("b_other_cancer_pct_b"),   "Cancer (%)",          value = CITO_DEFAULTS$b_other_cancer_pct,   min = 0, max = 100, step = 0.01),
-
+                
                 uiOutput(ns("params_alert_cito_b"))
               )
             )
           )
         )
       ),
-
-      # Screening coverage
+      
+      # ── Acordeão 3: Screening coverage ──────────────────────────────
+      # Slider 0–100% — independente do A
       tags$details(
         class = "scen-b-acc", open = NA,
         tags$summary("Screening coverage"),
         div(
           class = "scen-b-acc-body",
           sliderInput(ns("coverage_b"), NULL,
-            min = 0, max = 100, value = 70, step = 5, post = "%"
+                      min = 0, max = 100, value = 70, step = 5, post = "%"
           )
         )
       ),
 
-      # Resources
+      # ── Acordeão 4: Resources (capacidades) ─────────────────────────
+      # Mesma estrutura da sidebar (10): inputs em unidade configurável,
+      # anualizados depois em cfg_b via cap_mult_b.
       tags$details(
         class = "scen-b-acc",
         tags$summary("Resources"),
         div(
           class = "scen-b-acc-body",
           radioButtons(ns("cap_unidade_b"), "Capacity unit:",
-            choices  = c("Day" = "dia", "Week" = "semana", "Month" = "mes", "Year" = "ano"),
-            selected = "ano",
-            inline   = TRUE
+                       choices  = c("Day" = "dia", "Week" = "semana", "Month" = "mes", "Year" = "ano"),
+                       selected = "ano",
+                       inline   = TRUE
           ),
           numericInput(ns("cap_colposcopio_b"),  "Colposcope (per unit)",      value = 5760, min = 1, step = 1),
           numericInput(ns("cap_colposcopista_b"),"Colposcopist (per unit)",    value = 2880, min = 1, step = 1),
@@ -195,18 +249,6 @@ mod_compare_ui <- function(id) {
           numericInput(ns("cap_patologista_b"),   "Pathologist (per unit)",     value = 7200, min = 1, step = 1)
         )
       )
-    ),
-
-    # ── Área de resultados ─────────────────────────────────────────────
-    div(
-      class = "compare-results",
-      div(
-        class = "cc-page-header",
-        div(class = "cc-page-title", "Compare"),
-        div(class = "cc-page-subtitle", uiOutput(ns("result_desc")))
-      ),
-      uiOutput(ns("scenario_badges")),
-      uiOutput(ns("compare_table"))
     )
   )
 }
@@ -220,7 +262,13 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
                                cito_presets = NULL) {
   moduleServer(id, function(input, output, session) {
 
-    # ---- helpers ----
+    # ===========================================================
+    # BLOCO 1 — Helpers locais
+    # -----------------------------------------------------------
+    # val_or / fmt_or_dash duplicam helpers já existentes em 11/14/16
+    # (candidatos a mover para 01_utils_cc.R). fmt_dec1 é exclusivo
+    # deste módulo (cards de RH com 1 casa decimal).
+    # ===========================================================
     val_or <- function(x, default) {
       if (is.null(x) || length(x) == 0L || all(is.na(x))) default else x
     }
@@ -233,17 +281,27 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
       if (!is.finite(x)) "\u2013" else sprintf("%.1f", x)
     }
 
-    # ---- Brazil code ----
+    # ===========================================================
+    # BLOCO 2 — Identificação do Brasil
+    # -----------------------------------------------------------
+    # Helper único cc_country_info() em 01_utils_cc.R devolve
+    # list(code, label, is_brazil) a partir de input_global() e
+    # dim_country. Substitui o trio replicado em 11/14/15/16/17.
+    # ===========================================================
     br_code <- tryCatch({
       x <- dim_country[dim_country$population_name == "Brazil", "population_code"]
       if (length(x) == 0L || is.na(x[1])) NA_integer_ else as.integer(x[1])
     }, error = function(e) NA_integer_)
 
-    is_brazil <- reactive({
-      g <- input_global()
-      !is.na(br_code) && isTRUE(as.integer(val_or(g$pais_sel, NA)) == br_code)
-    })
+    ci <- reactive(cc_country_info(input_global(), dim_country, br_code))
 
+    # ===========================================================
+    # BLOCO 3 — Resolvedores de presets (HPV e Citologia)
+    # -----------------------------------------------------------
+    # Espelham `load_*_preset` de 10_mod_filters_cc.R, mas como
+    # funções puras (não disparam updateNumericInput por si).
+    # Usadas pelos observers do BLOCO 5.
+    # ===========================================================
     # ---- preset helpers ----
     get_hpv_preset_params <- function(src) {
       if (is.null(src) || !exists("HPV_PRESETS", inherits = TRUE)) return(list())
@@ -263,37 +321,31 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
       if (is.null(p)) list() else as.list(p)
     }
 
-    # ---- geo label ----
-    country_label <- function(code) {
-      tryCatch({
-        z <- dim_country[dim_country$population_code == code, "population_name"]
-        if (length(z) == 0L || is.na(z[1])) "Selected country" else as.character(z[1])
-      }, error = function(e) "Selected country")
-    }
-
+    # ===========================================================
+    # BLOCO 4 — Rótulo geográfico (geo_text)
+    # -----------------------------------------------------------
+    # Subtítulo "Compare": "Brazil - <Total/SUS> - <primeiro nível
+    # com seleção>" (no Brasil) ou nome do país (fora). Helper único
+    # cc_geo_label() em 01_utils_cc.R, modo "concat" com pop_tipo e
+    # first_level_only — diferente do geo_desc dos outros módulos
+    # porque aqui só o 1º nível com seleção entra na string.
+    # ===========================================================
     geo_text <- reactive({
-      g <- input_global()
-      if (!isTRUE(is_brazil())) {
-        return(country_label(as.integer(val_or(g$pais_sel, NA))))
-      }
-      parts <- "Brazil"
-      pop_label <- if (isTRUE(g$br_pop_tipo == "sus")) "SUS-dependent" else "Total population"
-      parts <- paste(parts, pop_label, sep = " - ")
-      add_geo <- function(x) {
-        x <- as.character(x); x <- x[!is.na(x) & nzchar(x)]
-        if (!length(x)) return(parts)
-        lab <- if (length(x) == 1L) x[1] else paste0(x[1], " (n=", length(x), ")")
-        paste(parts, lab, sep = " - ")
-      }
-      for (filt in list(g$filt_uf, g$filt_macro, g$filt_reg, g$filt_mun)) {
-        if (!is.null(filt) && length(filt) > 0) {
-          parts <- add_geo(filt); break
-        }
-      }
-      parts
+      cc_geo_label(input_global(), mode = "concat",
+                   dim_country = dim_country, br_code = br_code,
+                   pop_tipo = TRUE, first_level_only = TRUE)
     })
 
+    # ===========================================================
+    # BLOCO 5 — Sincronização Preset → inputs do Scenario B
+    # -----------------------------------------------------------
+    # Quando o usuário escolhe uma fonte (≠ "custom"), os 16 inputs
+    # numéricos do painel Customize são pré-preenchidos com os
+    # parâmetros da fonte. Essencial para que ao trocar para
+    # "Customize" os valores partam do preset, não dos defaults.
+    # ===========================================================
     # ── Sincroniza inputs numéricos com presets no Scenario B ────────────
+    # 5a) HPV — observa input$hpv_param_source_b
     observeEvent(input$hpv_param_source_b, {
       if (!identical(input$screen_method_b, "hpv")) return()
       src <- input$hpv_param_source_b
@@ -307,6 +359,9 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
       }
     }, ignoreInit = TRUE)
 
+    # 5b) Citologia — observa input$cito_param_source_b E filt_uf
+    # (a fonte SISCAN é por_uf=TRUE → resolve a UF herdada de A;
+    # 0 ou >1 UFs ⇒ fallback para "brasil")
     observe({
       src    <- input$cito_param_source_b
       g      <- input_global()
@@ -329,6 +384,12 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
       }
     })
 
+    # ===========================================================
+    # BLOCO 6 — Botões "Reset" do Scenario B
+    # -----------------------------------------------------------
+    # Restauram HPV_DEFAULTS / CITO_DEFAULTS nos 16 inputs do
+    # painel Customize do método ativo. Não tocam na fonte (`*_b`).
+    # ===========================================================
     # ── Reset dos parâmetros do Scenario B ───────────────────────────────
     observeEvent(input$reset_params_b, {
       if (!identical(input$screen_method_b, "hpv")) return()
@@ -344,6 +405,15 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
       }
     }, ignoreInit = TRUE)
 
+    # ===========================================================
+    # BLOCO 7 — Auto-balance "Lock proportions" (Scenario B)
+    # -----------------------------------------------------------
+    # Espelha lock_pair / lock_triplet de 10_mod_filters_cc.R, com
+    # estado próprio (rv_lock_b) e nomes sufixados "_b". Mantém
+    # somas = 100% identificando qual input mudou (via prev).
+    # `which_method` evita o observer disparar quando o método
+    # ativo do cenário B não corresponde (HPV vs Citologia).
+    # ===========================================================
     # ── Auto-balance de proporções (Scenario B) ─────────────────────────
     rv_lock_b <- reactiveValues(updating = FALSE, prev = list())
 
@@ -440,6 +510,13 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
                    remainder_id = "b_other_neg_nic1_pct_b", adjust_id = "b_other_nic23_pct_b",
                    which_method = "cytology", lock_input = "lock_prop_cito_b")
 
+    # ===========================================================
+    # BLOCO 8 — Validação de soma = 100% (Scenario B)
+    # -----------------------------------------------------------
+    # Mostra alertas em params_alert_b / params_alert_cito_b
+    # quando o usuário desativa "Lock proportions" e os grupos
+    # de proporções deixam de somar 100 (com tolerância 0.1).
+    # ===========================================================
     # ── Validações de soma = 100% (Scenario B) ───────────────────────────
     sum_check_b <- function(x, tol = 0.1) {
       x <- suppressWarnings(as.numeric(x)); x[is.na(x)] <- 0
@@ -457,7 +534,7 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
       if (!sum_check_b(c(input$b16_neg_nic1_b, input$b16_nic23_b, input$b16_cancer_b))) errs <- c(errs, "Biopsy (HPV 16/18) must sum to 100%.")
       if (!sum_check_b(c(input$bo_neg_nic1_b,  input$bo_nic23_b,  input$bo_cancer_b)))  errs <- c(errs, "Biopsy (HPV other) must sum to 100%.")
       if (!length(errs)) return(NULL)
-      div(style = "background:#ffe6e6;border:1px solid #cc0000;color:#990000;padding:8px;border-radius:6px;margin-top:6px;font-size:11px;",
+      div(style = "background:var(--cc-danger-bg);border:1px solid var(--cc-danger);color:var(--cc-danger);padding:8px;border-radius:6px;margin-top:6px;font-size:var(--t-xs);",
           strong("Please check parameters:"), tags$ul(lapply(errs, tags$li)))
     })
 
@@ -472,210 +549,115 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
       if (!sum_check_b(c(input$b_other_neg_nic1_pct_b, input$b_other_nic23_pct_b, input$b_other_cancer_pct_b)))
         errs <- c(errs, "Biopsy result (Other arm) must sum to 100%.")
       if (!length(errs)) return(NULL)
-      div(style = "background:#ffe6e6;border:1px solid #cc0000;color:#990000;padding:8px;border-radius:6px;margin-top:6px;font-size:11px;",
+      div(style = "background:var(--cc-danger-bg);border:1px solid var(--cc-danger);color:var(--cc-danger);padding:8px;border-radius:6px;margin-top:6px;font-size:var(--t-xs);",
           strong("Please check parameters:"), tags$ul(lapply(errs, tags$li)))
     })
 
-    # ── cfg_a: mirrors 11_mod_resumo_geral ──────────────────────────────
+    # ===========================================================
+    # BLOCO 9 — cfg_a: configuração do Scenario A
+    # -----------------------------------------------------------
+    # Wrapper único: cc_cfg_from_input() em 02_engine_capacity_cc.R
+    # encapsula coerção/clamp/retrocompat e é compartilhado entre
+    # Summary/Equipment/Pathway/Capacity/Compare.
+    # ===========================================================
     cfg_a <- reactive({
-      g <- input_global()
-
-      country_code <- suppressWarnings(as.integer(val_or(g$pais_sel, br_code)))
-      if (is.na(country_code)) country_code <- br_code
-
-      pop_mode <- as.character(val_or(g$pop_mode, "globocan"))
-      if (!pop_mode %in% c("globocan", "other")) pop_mode <- "globocan"
-
-      coverage <- suppressWarnings(as.numeric(val_or(g$coverage, 70)))
-      if (!is.finite(coverage)) coverage <- 70
-
-      screen_method <- as.character(val_or(g$screen_method, "hpv"))
-      if (!screen_method %in% c("hpv", "cytology")) screen_method <- "hpv"
-
-      target_age_min <- suppressWarnings(as.numeric(val_or(g$target_age_min, 25)))
-      target_age_max <- suppressWarnings(as.numeric(val_or(g$target_age_max, 64)))
-      if (!is.finite(target_age_min)) target_age_min <- 25
-      if (!is.finite(target_age_max)) target_age_max <- 64
-
-      custom_pop <- NA_real_
-      if (identical(pop_mode, "other")) {
-        custom_pop <- suppressWarnings(as.numeric(val_or(g$custom_pop, NA_real_)))
-      }
-
-      is_br       <- isTRUE(!is.na(country_code) && country_code == br_code)
-      br_pop_tipo <- as.character(val_or(g$br_pop_tipo, "total"))
-      if (!br_pop_tipo %in% c("total", "sus")) br_pop_tipo <- "total"
-
-      cc_engine_settings(
-        country_code      = country_code,
-        pop_mode          = pop_mode,
-        coverage          = coverage,
-        screen_method     = screen_method,
-        target_age_min    = target_age_min,
-        target_age_max    = target_age_max,
-        custom_pop        = custom_pop,
-
-        p16_18            = val_or(g$p16_18, NA_real_),
-        poutros           = val_or(g$poutros, NA_real_),
-        pneg              = val_or(g$pneg, NA_real_),
-        cito_out_pos      = val_or(g$cito_out_pos, NA_real_),
-        cito_out_neg      = val_or(g$cito_out_neg, NA_real_),
-        colpo16_pos       = val_or(g$colpo16_pos, NA_real_),
-        colpo16_neg       = val_or(g$colpo16_neg, NA_real_),
-        colpoout_pos      = val_or(g$colpoout_pos, NA_real_),
-        colpoout_neg      = val_or(g$colpoout_neg, NA_real_),
-        b16_neg_nic1      = val_or(g$b16_neg_nic1, NA_real_),
-        b16_nic23         = val_or(g$b16_nic23, NA_real_),
-        b16_cancer        = val_or(g$b16_cancer, NA_real_),
-        bo_neg_nic1       = val_or(g$bo_neg_nic1, NA_real_),
-        bo_nic23          = val_or(g$bo_nic23, NA_real_),
-        bo_cancer         = val_or(g$bo_cancer, NA_real_),
-
-        first_time_pct         = val_or(g$first_time_pct, NA_real_),
-        unsatisfactory_pct     = val_or(g$unsatisfactory_pct, NA_real_),
-        res_asch_pct           = val_or(g$res_asch_pct, NA_real_),
-        res_other_pct          = val_or(g$res_other_pct, NA_real_),
-        res_neg_pct            = val_or(g$res_neg_pct, NA_real_),
-        colpo_asch_pct         = val_or(g$colpo_asch_pct, NA_real_),
-        colpo_other_follow_pct = val_or(g$colpo_other_follow_pct, NA_real_),
-        biopsy_pos_asch_pct    = val_or(g$biopsy_pos_asch_pct, NA_real_),
-        biopsy_pos_other_pct   = val_or(g$biopsy_pos_other_pct, NA_real_),
-        b_asch_nic23_pct       = val_or(g$b_asch_nic23_pct, NA_real_),
-        b_asch_cancer_pct      = val_or(g$b_asch_cancer_pct, NA_real_),
-        b_asch_neg_nic1_pct    = val_or(g$b_asch_neg_nic1_pct, NA_real_),
-        b_other_nic23_pct      = val_or(g$b_other_nic23_pct, NA_real_),
-        b_other_cancer_pct     = val_or(g$b_other_cancer_pct, NA_real_),
-        b_other_neg_nic1_pct   = val_or(g$b_other_neg_nic1_pct, NA_real_),
-
-        # input_global already exposes annualized capacity values
-        cap_colpo_device  = val_or(g$cap_colpo_device, 5760),
-        cap_colpo_med     = val_or(g$cap_colpo_med,    2880),
-        cap_citopato      = val_or(g$cap_citopato,     14400),
-        cap_patol_med     = val_or(g$cap_patol_med,    7200),
-
-        is_brazil         = is_br,
-        br_pop_tipo       = br_pop_tipo,
-        filt_uf           = val_or(g$filt_uf, NULL),
-        filt_macro        = val_or(g$filt_macro, NULL),
-        filt_reg          = val_or(g$filt_reg, NULL),
-        filt_mun          = val_or(g$filt_mun, NULL)
-      )
+      cc_cfg_from_input(input_global(), br_code)
     })
 
-    # ── cfg_b: Scenario B inputs + inherited geo ─────────────────────────
+    # ===========================================================
+    # BLOCO 10 — cfg_b: configuração do Scenario B
+    # -----------------------------------------------------------
+    # Constrói um pseudo-`g_b` que herda de input_global() apenas país,
+    # pop_mode, custom_pop, br_pop_tipo e filtros geográficos; os demais
+    # campos vêm de `input$*_b` (método, cobertura, faixa etária, params
+    # HPV/Cito, capacidades). As capacidades são anualizadas via cap_mult_b
+    # (Day×240, Week×48, Month×12, Year×1) — mesma tabela usada em
+    # 10_mod_filters_cc.R. Em seguida, delega a tradução para
+    # cc_cfg_from_input() — mesma função usada por cfg_a (e pelos demais
+    # módulos).
+    # ===========================================================
     cfg_b <- reactive({
       g <- input_global()
 
-      country_code <- suppressWarnings(as.integer(val_or(g$pais_sel, br_code)))
-      if (is.na(country_code)) country_code <- br_code
-
-      pop_mode <- as.character(val_or(g$pop_mode, "globocan"))
-      if (!pop_mode %in% c("globocan", "other")) pop_mode <- "globocan"
-
-      custom_pop <- NA_real_
-      if (identical(pop_mode, "other"))
-        custom_pop <- suppressWarnings(as.numeric(val_or(g$custom_pop, NA_real_)))
-
-      is_br       <- isTRUE(!is.na(country_code) && country_code == br_code)
-      br_pop_tipo <- as.character(val_or(g$br_pop_tipo, "total"))
-      if (!br_pop_tipo %in% c("total", "sus")) br_pop_tipo <- "total"
+      cap_mult_b <- switch(
+        val_or(input$cap_unidade_b, "ano"),
+        dia = 240, semana = 48, mes = 12, ano = 1, 1
+      )
 
       method_b <- as.character(val_or(input$screen_method_b, "hpv"))
       if (!method_b %in% c("hpv", "cytology")) method_b <- "hpv"
 
-      coverage_b <- suppressWarnings(as.numeric(val_or(input$coverage_b, 70)))
-      if (!is.finite(coverage_b)) coverage_b <- 70
+      g_b <- list(
+        # Herdados do cenário A (sidebar global)
+        pais_sel    = g$pais_sel,
+        pop_mode    = g$pop_mode,
+        custom_pop  = g$custom_pop,
+        br_pop_tipo = g$br_pop_tipo,
+        filt_uf     = g$filt_uf,
+        filt_macro  = g$filt_macro,
+        filt_reg    = g$filt_reg,
+        filt_mun    = g$filt_mun,
 
-      age_min_b <- suppressWarnings(as.numeric(val_or(input$target_age_min_b, 25)))
-      age_max_b <- suppressWarnings(as.numeric(val_or(input$target_age_max_b, 64)))
-      if (!is.finite(age_min_b)) age_min_b <- 25
-      if (!is.finite(age_max_b)) age_max_b <- 64
+        # Específicos do Scenario B
+        screen_method  = method_b,
+        coverage       = val_or(input$coverage_b,       70),
+        target_age_min = val_or(input$target_age_min_b, 25),
+        target_age_max = val_or(input$target_age_max_b, 64),
 
-      cap_mult_b <- switch(val_or(input$cap_unidade_b, "ano"), dia = 240, semana = 48, mes = 12, ano = 1, 1)
-      cap_colpo_device_b <- cap_mult_b * val_or(input$cap_colposcopio_b,   5760)
-      cap_colpo_med_b    <- cap_mult_b * val_or(input$cap_colposcopista_b, 2880)
-      cap_citopato_b     <- cap_mult_b * val_or(input$cap_citopato_b,      14400)
-      cap_patol_med_b    <- cap_mult_b * val_or(input$cap_patologista_b,   7200)
+        # HPV (NA → engine cai em HPV_DEFAULTS se método = HPV;
+        # ignorado se método = cytology)
+        p16_18       = val_or(input$p16_18_b,       NA_real_),
+        poutros      = val_or(input$poutros_b,      NA_real_),
+        pneg         = val_or(input$pneg_b,         NA_real_),
+        cito_out_pos = val_or(input$cito_out_pos_b, NA_real_),
+        cito_out_neg = val_or(input$cito_out_neg_b, NA_real_),
+        colpo16_pos  = val_or(input$colpo16_pos_b,  NA_real_),
+        colpo16_neg  = val_or(input$colpo16_neg_b,  NA_real_),
+        colpoout_pos = val_or(input$colpoout_pos_b, NA_real_),
+        colpoout_neg = val_or(input$colpoout_neg_b, NA_real_),
+        b16_neg_nic1 = val_or(input$b16_neg_nic1_b, NA_real_),
+        b16_nic23    = val_or(input$b16_nic23_b,    NA_real_),
+        b16_cancer   = val_or(input$b16_cancer_b,   NA_real_),
+        bo_neg_nic1  = val_or(input$bo_neg_nic1_b,  NA_real_),
+        bo_nic23     = val_or(input$bo_nic23_b,     NA_real_),
+        bo_cancer    = val_or(input$bo_cancer_b,    NA_real_),
 
-      if (identical(method_b, "hpv")) {
-        cc_engine_settings(
-          country_code      = country_code,
-          pop_mode          = pop_mode,
-          coverage          = coverage_b,
-          screen_method     = "hpv",
-          target_age_min    = age_min_b,
-          target_age_max    = age_max_b,
-          custom_pop        = custom_pop,
+        # Citologia (NA → engine cai em CITO_DEFAULTS se método = cytology)
+        first_time_pct         = val_or(input$first_time_pct_b,         NA_real_),
+        unsatisfactory_pct     = val_or(input$unsatisfactory_pct_b,     NA_real_),
+        res_asch_pct           = val_or(input$res_asch_pct_b,           NA_real_),
+        res_other_pct          = val_or(input$res_other_pct_b,          NA_real_),
+        res_neg_pct            = val_or(input$res_neg_pct_b,            NA_real_),
+        colpo_asch_pct         = val_or(input$colpo_asch_pct_b,         NA_real_),
+        colpo_other_follow_pct = val_or(input$colpo_other_follow_pct_b, NA_real_),
+        biopsy_pos_asch_pct    = val_or(input$biopsy_pos_asch_pct_b,    NA_real_),
+        biopsy_pos_other_pct   = val_or(input$biopsy_pos_other_pct_b,   NA_real_),
+        b_asch_nic23_pct       = val_or(input$b_asch_nic23_pct_b,       NA_real_),
+        b_asch_cancer_pct      = val_or(input$b_asch_cancer_pct_b,      NA_real_),
+        b_asch_neg_nic1_pct    = val_or(input$b_asch_neg_nic1_pct_b,    NA_real_),
+        b_other_nic23_pct      = val_or(input$b_other_nic23_pct_b,      NA_real_),
+        b_other_cancer_pct     = val_or(input$b_other_cancer_pct_b,     NA_real_),
+        b_other_neg_nic1_pct   = val_or(input$b_other_neg_nic1_pct_b,   NA_real_),
 
-          p16_18       = val_or(input$p16_18_b,       NA_real_),
-          poutros      = val_or(input$poutros_b,      NA_real_),
-          pneg         = val_or(input$pneg_b,         NA_real_),
-          cito_out_pos = val_or(input$cito_out_pos_b, NA_real_),
-          cito_out_neg = val_or(input$cito_out_neg_b, NA_real_),
-          colpo16_pos  = val_or(input$colpo16_pos_b,  NA_real_),
-          colpo16_neg  = val_or(input$colpo16_neg_b,  NA_real_),
-          colpoout_pos = val_or(input$colpoout_pos_b, NA_real_),
-          colpoout_neg = val_or(input$colpoout_neg_b, NA_real_),
-          b16_neg_nic1 = val_or(input$b16_neg_nic1_b, NA_real_),
-          b16_nic23    = val_or(input$b16_nic23_b,    NA_real_),
-          b16_cancer   = val_or(input$b16_cancer_b,   NA_real_),
-          bo_neg_nic1  = val_or(input$bo_neg_nic1_b,  NA_real_),
-          bo_nic23     = val_or(input$bo_nic23_b,     NA_real_),
-          bo_cancer    = val_or(input$bo_cancer_b,    NA_real_),
+        # Capacidades anualizadas
+        cap_colpo_device = cap_mult_b * val_or(input$cap_colposcopio_b,   5760),
+        cap_colpo_med    = cap_mult_b * val_or(input$cap_colposcopista_b, 2880),
+        cap_citopato     = cap_mult_b * val_or(input$cap_citopato_b,      14400),
+        cap_patol_med    = cap_mult_b * val_or(input$cap_patologista_b,   7200)
+      )
 
-          cap_colpo_device = cap_colpo_device_b,
-          cap_colpo_med    = cap_colpo_med_b,
-          cap_citopato     = cap_citopato_b,
-          cap_patol_med    = cap_patol_med_b,
-
-          is_brazil   = is_br,
-          br_pop_tipo = br_pop_tipo,
-          filt_uf     = val_or(g$filt_uf, NULL),
-          filt_macro  = val_or(g$filt_macro, NULL),
-          filt_reg    = val_or(g$filt_reg, NULL),
-          filt_mun    = val_or(g$filt_mun, NULL)
-        )
-      } else {
-        cc_engine_settings(
-          country_code      = country_code,
-          pop_mode          = pop_mode,
-          coverage          = coverage_b,
-          screen_method     = "cytology",
-          target_age_min    = age_min_b,
-          target_age_max    = age_max_b,
-          custom_pop        = custom_pop,
-
-          first_time_pct         = val_or(input$first_time_pct_b,         NA_real_),
-          unsatisfactory_pct     = val_or(input$unsatisfactory_pct_b,     NA_real_),
-          res_asch_pct           = val_or(input$res_asch_pct_b,           NA_real_),
-          res_other_pct          = val_or(input$res_other_pct_b,          NA_real_),
-          res_neg_pct            = val_or(input$res_neg_pct_b,            NA_real_),
-          colpo_asch_pct         = val_or(input$colpo_asch_pct_b,         NA_real_),
-          colpo_other_follow_pct = val_or(input$colpo_other_follow_pct_b, NA_real_),
-          biopsy_pos_asch_pct    = val_or(input$biopsy_pos_asch_pct_b,    NA_real_),
-          biopsy_pos_other_pct   = val_or(input$biopsy_pos_other_pct_b,   NA_real_),
-          b_asch_nic23_pct       = val_or(input$b_asch_nic23_pct_b,       NA_real_),
-          b_asch_cancer_pct      = val_or(input$b_asch_cancer_pct_b,      NA_real_),
-          b_asch_neg_nic1_pct    = val_or(input$b_asch_neg_nic1_pct_b,    NA_real_),
-          b_other_nic23_pct      = val_or(input$b_other_nic23_pct_b,      NA_real_),
-          b_other_cancer_pct     = val_or(input$b_other_cancer_pct_b,     NA_real_),
-          b_other_neg_nic1_pct   = val_or(input$b_other_neg_nic1_pct_b,   NA_real_),
-
-          cap_colpo_device = cap_colpo_device_b,
-          cap_colpo_med    = cap_colpo_med_b,
-          cap_citopato     = cap_citopato_b,
-          cap_patol_med    = cap_patol_med_b,
-
-          is_brazil   = is_br,
-          br_pop_tipo = br_pop_tipo,
-          filt_uf     = val_or(g$filt_uf, NULL),
-          filt_macro  = val_or(g$filt_macro, NULL),
-          filt_reg    = val_or(g$filt_reg, NULL),
-          filt_mun    = val_or(g$filt_mun, NULL)
-        )
-      }
+      cc_cfg_from_input(g_b, br_code)
     })
 
+    # ===========================================================
+    # BLOCO 11 — Execução dos engines + flatten
+    # -----------------------------------------------------------
+    # res_a / res_b: rodam cc_engine_run sobre cada cfg, com tryCatch
+    #                para que erros virem NULL (UI mostra "Results
+    #                not available" em vez de crashar a sessão).
+    # dt_a / dt_b: 1 linha cada, via cc_engine_summary_dt — facilita
+    #              o lookup de colunas na tabela comparativa.
+    # ===========================================================
     # ── Run engines ─────────────────────────────────────────────────────
     res_a <- reactive({
       tryCatch(
@@ -699,6 +681,15 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
       r <- res_b(); if (is.null(r)) NULL else cc_engine_summary_dt(r)
     })
 
+    # ===========================================================
+    # BLOCO 12 — UIs dinâmicas auxiliares (geo + população + header)
+    # -----------------------------------------------------------
+    # geo_locked  — exibe a geografia herdada (read-only) no painel B.
+    # pop_b_ui    — render condicional: se pop_mode = "other" mostra
+    #               o custom_pop herdado de A; senão, só uma nota
+    #               "GLOBOCAN (inherited)".
+    # result_desc — subtítulo do header do "Compare".
+    # ===========================================================
     # ── Dynamic UIs ─────────────────────────────────────────────────────
 
     output$geo_locked <- renderUI({
@@ -722,6 +713,16 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
       geo_text()
     })
 
+    # ===========================================================
+    # BLOCO 13 — Scenario badges (resumo visual A vs B)
+    # -----------------------------------------------------------
+    # Dois cartões lado a lado com:
+    #   • label   ("Scenario A"/"Scenario B")
+    #   • method  (HPV test / Cytology)
+    #   • ages    (faixa) + coverage (%)
+    # Helpers internos `method_label`, `age_label`, `cov_label`
+    # tratam fallback quando dt_a/dt_b ainda são NULL (1ª render).
+    # ===========================================================
     # ── Scenario badges ──────────────────────────────────────────────────
     output$scenario_badges <- renderUI({
       g  <- input_global()
@@ -765,6 +766,28 @@ mod_compare_server <- function(id, input_global, df_completo, dim_country, pop_m
       )
     })
 
+    # ===========================================================
+    # BLOCO 14 — Tabela comparativa A | B | Δ B vs A
+    # -----------------------------------------------------------
+    # Estrutura por grupos (group_row → row1, row2, ...):
+    #   1) Target population         — pop_selected, screened_per_year
+    #   2) Work-up                    — citologia (reflex/diag), colpo, biópsia
+    #   3) Treatment and follow-up    — EZT + 2 follow-ups (HPV: HPV+colpo;
+    #                                    Cito: cytologies+colposcopies)
+    #   4) Resources needed (annual)  — colposcópios, colposcopistas,
+    #                                    citopatologistas, patologistas
+    #
+    # Helpers internos:
+    #   • get_num(dt, col)  / get_hr(res, col) — leitura defensiva
+    #   • delta_pill(va, vb)                    — pílula com Δ% (▲/▼/—)
+    #   • row(label, col, ...)                  — monta uma <tr> da tabela
+    #   • group_row(label)                      — header de seção (colspan=4)
+    #
+    # Caso especial — métodos diferentes em A e B (ex.: A=HPV, B=Cito):
+    #   • a linha de "cytology" usa o rótulo do método de A;
+    #   • follow-up vira "Follow-up test" (escolhe o que está disponível)
+    #     + "Follow-up colposcopy" (genérico).
+    # ===========================================================
     # ── Comparison table ─────────────────────────────────────────────────
     output$compare_table <- renderUI({
       sa <- dt_a()

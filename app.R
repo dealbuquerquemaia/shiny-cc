@@ -1,5 +1,18 @@
 # ===========================================================
-# Shiny-CC — app.R (v1.0)
+# Shiny-CC — app.R (v1.2)
+# -----------------------------------------------------------
+# Entry point do dashboard de rastreamento de câncer do colo
+# do útero (CCU). Responsabilidades deste arquivo:
+#   1. Carregar pacotes e scripts R/ (constantes, utils, engine, módulos)
+#   2. Ler os .rds de data/ e converter para data.table quando aplicável
+#   3. Montar a UI (navbarPage com 10 abas + sidebar de filtros globais)
+#   4. No server: instanciar o módulo de filtros (produz input_global)
+#      e propagá-lo para cada módulo de aba
+#   5. Implementar o export de PDF (rerroda o engine e renderiza
+#      www/report_template.Rmd via pagedown)
+#
+# Dados consumidos: ver seção "Dados" abaixo (todos vêm de data-raw/).
+# Documentação: README.md (seção "Arquivos") e docs/INVENTORY.md
 # ===========================================================
 
 suppressPackageStartupMessages({
@@ -22,24 +35,26 @@ source("R/01_utils_cc.R")
 source("R/02_engine_capacity_cc.R")
 
 # ===========================================================
-# Dados (saída agora em .rds)
+# Dados (todos os .rds são produzidos pelos scripts de data-raw/)
+# Carregados uma vez na inicialização do app e usados via closure.
 # ===========================================================
 
-df_cc_completo <- readRDS("data/df_cc_completo.rds")
-df_cc_taxas    <- readRDS("data/df_cc_taxas.rds")
-df_dim_country             <- readRDS("data/df_dim_country.rds")
-df_dim_age                 <- readRDS("data/df_dim_age.rds")
-df_dim_type                <- readRDS("data/df_dim_type.rds")
-df_dim_year                <- readRDS("data/df_dim_year.rds")
+# --- Bases globais GLOBOCAN (produzidas por data-raw/01_prepare_cc.R) ----
+df_cc_completo <- readRDS("data/df_cc_completo.rds")   # incidência/mortalidade/população por país × faixa etária
+df_cc_taxas    <- readRDS("data/df_cc_taxas.rds")      # taxas (incidência/mortalidade ASR-world) por país
+df_dim_country <- readRDS("data/df_dim_country.rds")   # dimensão país: population_code ↔ population_name
+df_dim_age     <- readRDS("data/df_dim_age.rds")       # dimensão faixas etárias
+df_dim_type    <- readRDS("data/df_dim_type.rds")      # dimensão tipo de métrica (incidência, mortalidade)
+df_dim_year    <- readRDS("data/df_dim_year.rds")      # dimensão ano
 
-# --- Bases Brasil / SUS (saídas do 02_prepare_BR e 03_prepare_SUS) -----
-pop_municipio_faixas           <- readRDS("data/pop_municipio_faixas.rds")
-pop_municipio_faixas_total_sus <- readRDS("data/pop_municipio_faixas_total_sus.rds")
-pop_municipio_regional         <- readRDS("data/pop_municipio_regional.rds")
-regional_sus_map               <- readRDS("data/regional_sus_map.rds")
-sia_cc_resumo                  <- readRDS("data/sus_proc_resumo.rds")
-cito_presets                   <- readRDS("data/cito_presets.rds")
-peers_data                     <- readRDS("data/peers.rds")
+# --- Bases Brasil / SUS (produzidas por data-raw/02_prepare_BR e 03_prepare_SUS) ----
+pop_municipio_faixas           <- readRDS("data/pop_municipio_faixas.rds")            # pop fem por município × faixa etária (IBGE)
+pop_municipio_faixas_total_sus <- readRDS("data/pop_municipio_faixas_total_sus.rds")  # idem, versão SUS-dependente (IBGE − ANS)
+pop_municipio_regional         <- readRDS("data/pop_municipio_regional.rds")          # pop + mapeamento município → região de saúde → macro → UF
+regional_sus_map               <- readRDS("data/regional_sus_map.rds")                # mapeamento geográfico (sem população)
+sia_cc_resumo                  <- readRDS("data/sus_proc_resumo.rds")                 # produção SIA 2024 (citologia, colposcopia, biópsia, EZT)
+cito_presets                   <- readRDS("data/cito_presets.rds")                    # parâmetros de citologia (INCA 2019 + SISCAN por UF)
+peers_data                     <- readRDS("data/peers.rds")                           # países peers (para aba Peer Analysis)
 
 # data.table
 setDT(df_cc_completo)
@@ -55,12 +70,15 @@ setDT(pop_municipio_regional)
 setDT(regional_sus_map)
 setDT(peers_data)
 
-# --- Geometrias Brasil (sf) para o módulo Maps -------------------------
-geo_municipios    <- readRDS("data/geo_municipios.rds")
-geo_regioes_saude <- readRDS("data/geo_regioes_saude.rds")
-geo_macrorregioes <- readRDS("data/geo_macrorregioes.rds")
-geo_estados       <- readRDS("data/geo_estados.rds")
+# --- Geometrias Brasil (sf, produzidas por data-raw/08_prepare_geometrias.R) ----
+# São objetos `sf` já simplificados (rmapshaper) para performance no leaflet.
+geo_municipios    <- readRDS("data/geo_municipios.rds")     # polígonos dos municípios
+geo_regioes_saude <- readRDS("data/geo_regioes_saude.rds")  # polígonos das regiões de saúde
+geo_macrorregioes <- readRDS("data/geo_macrorregioes.rds")  # polígonos das macrorregiões de saúde
+geo_estados       <- readRDS("data/geo_estados.rds")        # polígonos das UFs
 
+# Código GLOBOCAN do Brasil — usado como default quando o país não está selecionado
+# e como flag (is_br) que ativa funcionalidades subnacionais nos módulos.
 br_code <- df_dim_country[population_name == "Brazil", population_code][1]
 if (is.na(br_code)) br_code <- 1001L   # fallback coerente com o resto do app
 
@@ -229,8 +247,13 @@ ui <- tagList(
 # ===========================================================
 
 server <- function(input, output, session) {
-  
+
   # ====== Filtros globais (módulo) ==========================
+  # O módulo de filtros produz um reactive `input_global()` que encapsula
+  # TODAS as seleções do usuário (país, cobertura, método, faixa etária,
+  # parâmetros HPV/citologia, filtros geográficos subnacionais e capacidades).
+  # Esse reactive é passado para cada módulo de aba — ou seja, nenhum outro
+  # módulo tem inputs próprios de seleção geográfica/protocolo.
   input_global <- mod_filters_cc_server(
     id                     = "filters",
     pop_municipio_regional = pop_municipio_regional,
@@ -317,6 +340,15 @@ server <- function(input, output, session) {
   )
 
   # ── PDF export ────────────────────────────────────────────────────────
+  # O export de PDF NÃO reaproveita os outputs dos módulos — rerroda o engine
+  # independentemente (ver `pdf_data` reactive abaixo) para garantir um snapshot
+  # consistente em um único ponto no tempo. Depois renderiza `www/report_template.Rmd`
+  # e converte para PDF via pagedown::chrome_print.
+  #
+  # NOTA: os helpers abaixo (.fmt_safe, .val_or, .num1, .cap1, .req_n, .demand_cito,
+  # .demand_patol, .fmt_rate_safe) são cópias locais de helpers que também existem
+  # em outros módulos. Candidatos a consolidação em R/01_utils_cc.R
+  # (ver docs/INVENTORY.md → pendências).
 
   # Helpers (mirrors module helpers, used only in PDF export path)
   .fmt_safe <- function(x) {

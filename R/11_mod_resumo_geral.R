@@ -1,22 +1,49 @@
 # ===========================================================
-#11_mod_resumo_geral.R
+# 11_mod_resumo_geral.R — Aba "Summary" do dashboard
+# -----------------------------------------------------------
+# Renderiza a tela de KPIs consolidados do cenário:
+#   Target population → Work-up → Treatment and follow-up
+# É essencialmente uma camada fina em cima do engine:
+#   input_global()  ->  cfg (reactive)  ->  cc_engine_run()  ->  cards
+#
+# Dependências:
+#   - cc_engine_settings / cc_engine_run / cc_engine_summary_dt (02_engine_capacity_cc.R)
+#   - fmt_int (01_utils_cc.R)
+#   - HPV_DEFAULTS / CITO_DEFAULTS (via engine fallback)
+#   - cc_TOOLTIPS (00_constants_cc.R) — textos de ajuda dos cards
+#
+# Nota: usa helpers internos `val_or` e `fmt_or_dash` — eles
+# duplicam lógica equivalente em app.R (.val_or) e utils
+# (fmt_int). Ver docs/INVENTORY.md > Observações.
 # ===========================================================
 
+# -----------------------------------------------------------
+# UI — cabeçalho + container dinâmico dos cards
+# -----------------------------------------------------------
 mod_resumo_geral_ui <- function(id) {
   ns <- NS(id)
-  
+
   tagList(
     div(
       class = "cc-page-header",
       div(class = "cc-page-title", "Summary"),
+      # Subtítulo dinâmico: descreve geografia + recorte populacional
       div(class = "cc-page-subtitle", textOutput(ns("geo_desc")))
     ),
+    # Cards renderizados no server (3 seções: target / work-up / treatment)
     uiOutput(ns("cards_resumo"))
   )
 }
 
 
-#####################SERVER###########################
+########################## SERVER ##############################
+# Assinatura:
+#   df_completo      : data.table GLOBOCAN (incidência/mortalidade/pop)
+#   dim_age          : dicionário de faixas etárias (não usado hoje; mantido p/ futuro)
+#   dim_country      : dicionário de países (para resolver label do país)
+#   input_global     : reactive devolvido por mod_filters_cc_server (SSOT da sidebar)
+#   pop_mun_regional : data.table de populações BR por município/regional
+# ---------------------------------------------------------------
 mod_resumo_geral_server <- function(
     id,
     df_completo,
@@ -26,21 +53,28 @@ mod_resumo_geral_server <- function(
     pop_mun_regional
 ) {
   moduleServer(id, function(input, output, session) {
-    
-    # ---- helpers ----
+
+    # -----------------------------------------------------------
+    # 1) Helpers locais
+    #    val_or      : fallback NULL/NA → default
+    #    fmt_or_dash : formata inteiro ou devolve "–" (en-dash)
+    #    (Ambos têm análogos em app.R/utils — ver pendências)
+    # -----------------------------------------------------------
     val_or <- function(x, default) {
       if (is.null(x) || length(x) == 0L || all(is.na(x))) default else x
     }
     fmt_or_dash <- function(x) {
       if (is.null(x) || length(x) == 0L || is.na(x)) "–" else fmt_int(round(x))
     }
-    
-    # ---- país selecionado -------------------------------------------
-    country_code <- reactive({
-      req(input_global()$pais_sel)
-      as.integer(input_global()$pais_sel)
-    })
-    
+
+    # -----------------------------------------------------------
+    # 2) Identificação do país selecionado
+    #    Helper único cc_country_info() em 01_utils_cc.R devolve
+    #    list(code, label, is_brazil) a partir de input_global() e
+    #    dim_country. Substitui o trio replicado em 11/14/15/16/17.
+    # -----------------------------------------------------------
+    # Resolve o código GLOBOCAN do Brasil uma única vez (module scope).
+    # Se falhar, guarda NA_integer_ e ci()$is_brazil fica sempre FALSE.
     br_code <- tryCatch(
       {
         x <- dim_country[dim_country$population_name == "Brazil", "population_code"]
@@ -48,11 +82,12 @@ mod_resumo_geral_server <- function(
       },
       error = function(e) NA_integer_
     )
-    
-    is_brazil <- reactive({
-      !is.na(br_code) && isTRUE(country_code() == br_code)
-    })
-    
+
+    ci <- reactive(cc_country_info(input_global(), dim_country, br_code))
+
+    # pick_all(): helper para exibir um único rótulo ou "primeiro (n=K)".
+    # Mantido no arquivo para reuso futuro; hoje o código efetivo usa add_if()
+    # inline dentro de output$geo_desc. Candidato a limpeza.
     pick_all <- function(x) {
       if (is.null(x) || !length(x)) return("–")
       x <- as.character(x)
@@ -62,153 +97,37 @@ mod_resumo_geral_server <- function(
       paste0(x[1], " (n=", length(x), ")")
     }
     
-    country_label <- function(code) {
-      if (is.null(code) || is.na(code)) return("World")
-      nm <- tryCatch(
-        {
-          z <- dim_country[dim_country$population_code == code, "population_name"]
-          if (length(z) == 0L || is.na(z[1])) "Selected country" else as.character(z[1])
-        },
-        error = function(e) "Selected country"
-      )
-      nm
-    }
-    
+    # -----------------------------------------------------------
+    # 3) Subtítulo dinâmico da página (geo_desc)
+    #    - Não-Brasil → apenas nome do país (ou "World")
+    #    - Brasil     → "Brazil - <Total/SUS> - [UF] - [Macro] - [Região] - [Município]"
+    #      Cada filtro só entra se tiver seleção; múltiplas seleções viram
+    #      "Primeiro (n=K)". Helper único cc_geo_label() em 01_utils_cc.R.
+    # -----------------------------------------------------------
     output$geo_desc <- renderText({
-      g <- input_global()
-      
-      # Mundo / País
-      if (!isTRUE(is_brazil())) {
-        return(country_label(country_code()))
-      }
-      
-      parts <- c("Brazil")
-
-      pop_tipo_label <- if (isTRUE(g$br_pop_tipo == "sus")) "SUS-dependent" else "Total population"
-      parts <- c(parts, pop_tipo_label)
-
-      add_if <- function(x, prefix = NULL) {
-        x <- if (is.null(x) || !length(x)) character(0) else as.character(x)
-        x <- x[!is.na(x) & nzchar(x)]
-        if (!length(x)) return(invisible(NULL))
-        
-        lab <- if (length(x) == 1L) x[1] else paste0(x[1], " (n=", length(x), ")")
-        if (!is.null(prefix)) lab <- paste0(prefix, ": ", lab)
-        parts <<- c(parts, lab)
-      }
-      
-      add_if(g$filt_uf)     # UF
-      add_if(g$filt_macro)  # Macro
-      add_if(g$filt_reg)    # Região
-      add_if(g$filt_mun)    # Município
-      
-      paste(parts, collapse = " - ")
+      cc_geo_label(input_global(), mode = "concat",
+                   dim_country = dim_country, br_code = br_code,
+                   pop_tipo = TRUE)
     })
     
     
-    # ---- cfg for engine_capacity_cc ----
+    # -----------------------------------------------------------
+    # 4) cfg: reactive que traduz input_global() em cc_engine_settings()
+    #    Wrapper único: cc_cfg_from_input() em 02_engine_capacity_cc.R
+    #    encapsula coerção/clamp/retrocompat (programa, proto1_age_*) e
+    #    é compartilhado entre Summary/Equipment/Pathway/Capacity/Compare.
+    # -----------------------------------------------------------
     cfg <- reactive({
-      g <- input_global()
-      
-      country_code <- suppressWarnings(as.integer(val_or(g$pais_sel, br_code)))
-      if (is.na(country_code)) country_code <- br_code
-      
-      pop_mode <- as.character(val_or(g$pop_mode, "globocan"))
-      if (!pop_mode %in% c("globocan", "other")) pop_mode <- "globocan"
-      
-      coverage <- suppressWarnings(as.numeric(val_or(g$coverage, 70)))
-      if (!is.finite(coverage)) coverage <- 70
-      
-      # screen_method: prefer novo nome; fallback para "programa" (HPV/Citologia)
-      screen_method <- val_or(g$screen_method, NULL)
-      if (is.null(screen_method)) {
-        prog <- val_or(g$programa, "HPV")
-        screen_method <- if (identical(prog, "Citologia")) "cytology" else "hpv"
-      }
-      screen_method <- as.character(screen_method)
-      if (!screen_method %in% c("hpv", "cytology")) screen_method <- "hpv"
-      
-      # idades/intervalo: prefer novo; fallback para proto1_* (se ainda existir)
-      target_age_min <- suppressWarnings(as.numeric(val_or(g$target_age_min, val_or(g$proto1_age_min, 25))))
-      target_age_max <- suppressWarnings(as.numeric(val_or(g$target_age_max, val_or(g$proto1_age_max, 64))))
-      if (!is.finite(target_age_min)) target_age_min <- 25
-      if (!is.finite(target_age_max)) target_age_max <- 64
-      
-      
-      custom_pop <- NA_real_
-      if (identical(pop_mode, "other")) {
-        custom_pop <- suppressWarnings(as.numeric(val_or(g$custom_pop, NA_real_)))
-      }
-      
-      is_br <- isTRUE(!is.na(country_code) && country_code == br_code)
-      br_pop_tipo <- as.character(val_or(g$br_pop_tipo, "total"))
-      if (!br_pop_tipo %in% c("total", "sus")) br_pop_tipo <- "total"
-      
-      cc_engine_settings(
-        country_code      = country_code,
-        pop_mode          = pop_mode,
-        coverage          = coverage,
-        screen_method     = screen_method,
-        target_age_min    = target_age_min,
-        target_age_max    = target_age_max,
-        custom_pop        = custom_pop,
-        
-        # HPV params (se não vierem, engine usa defaults)
-        p16_18            = val_or(g$p16_18, NA_real_),
-        poutros           = val_or(g$poutros, NA_real_),
-        pneg              = val_or(g$pneg, NA_real_),
-        cito_out_pos      = val_or(g$cito_out_pos, NA_real_),
-        cito_out_neg      = val_or(g$cito_out_neg, NA_real_),
-        colpo16_pos       = val_or(g$colpo16_pos, NA_real_),
-        colpo16_neg       = val_or(g$colpo16_neg, NA_real_),
-        colpoout_pos      = val_or(g$colpoout_pos, NA_real_),
-        colpoout_neg      = val_or(g$colpoout_neg, NA_real_),
-        b16_neg_nic1      = val_or(g$b16_neg_nic1, NA_real_),
-        b16_nic23         = val_or(g$b16_nic23, NA_real_),
-        b16_cancer        = val_or(g$b16_cancer, NA_real_),
-        bo_neg_nic1       = val_or(g$bo_neg_nic1, NA_real_),
-        bo_nic23          = val_or(g$bo_nic23, NA_real_),
-        bo_cancer         = val_or(g$bo_cancer, NA_real_),
-        
-        # citologia (novo modelo)
-        first_time_pct         = val_or(g$first_time_pct, NA_real_),
-        unsatisfactory_pct     = val_or(g$unsatisfactory_pct, NA_real_),
-        
-        res_asch_pct           = val_or(g$res_asch_pct, NA_real_),
-        res_other_pct          = val_or(g$res_other_pct, NA_real_),
-        res_neg_pct            = val_or(g$res_neg_pct, NA_real_),
-        
-        colpo_asch_pct         = val_or(g$colpo_asch_pct, NA_real_),
-        colpo_other_follow_pct = val_or(g$colpo_other_follow_pct, NA_real_),
-        
-        biopsy_pos_asch_pct    = val_or(g$biopsy_pos_asch_pct, NA_real_),
-        biopsy_pos_other_pct   = val_or(g$biopsy_pos_other_pct, NA_real_),
-        
-        b_asch_nic23_pct       = val_or(g$b_asch_nic23_pct, NA_real_),
-        b_asch_cancer_pct      = val_or(g$b_asch_cancer_pct, NA_real_),
-        b_asch_neg_nic1_pct    = val_or(g$b_asch_neg_nic1_pct, NA_real_),
-        
-        b_other_nic23_pct      = val_or(g$b_other_nic23_pct, NA_real_),
-        b_other_cancer_pct     = val_or(g$b_other_cancer_pct, NA_real_),
-        b_other_neg_nic1_pct   = val_or(g$b_other_neg_nic1_pct, NA_real_),
-        
-        # capacidades (se existirem no filters; se NA, engine cai no BASE_ANO)
-        cap_colpo_device  = val_or(g$cap_colpo_device, NA_real_),
-        cap_colpo_med     = val_or(g$cap_colpo_med, NA_real_),
-        cap_citopato      = val_or(g$cap_citopato, NA_real_),
-        cap_patol_med     = val_or(g$cap_patol_med, NA_real_),
-        
-        # BR subnacional
-        is_brazil         = is_br,
-        br_pop_tipo       = br_pop_tipo,
-        filt_uf           = val_or(g$filt_uf, NULL),
-        filt_macro        = val_or(g$filt_macro, NULL),
-        filt_reg          = val_or(g$filt_reg, NULL),
-        filt_mun          = val_or(g$filt_mun, NULL)
-      )
+      cc_cfg_from_input(input_global(), br_code)
     })
     
-    # ---- run engine ----
+    # -----------------------------------------------------------
+    # 5) Execução do engine
+    #    - res_engine : roda cc_engine_run; captura erro como objeto
+    #      (permite mostrar "No data" no card sem derrubar a sessão).
+    #    - dt_sum     : achata o resultado em data.table 1 linha
+    #      (NULL se res_engine devolveu erro).
+    # -----------------------------------------------------------
     res_engine <- reactive({
       req(df_completo)
       tryCatch(
@@ -216,18 +135,26 @@ mod_resumo_geral_server <- function(
         error = function(e) e
       )
     })
-    
+
     dt_sum <- reactive({
       r <- res_engine()
       if (inherits(r, "error")) return(NULL)
       cc_engine_summary_dt(r)
     })
     
-    # ---- cards ----
+    # -----------------------------------------------------------
+    # 6) Render dos cards (3 seções)
+    #    Sections: Target population | Work-up | Treatment & follow-up
+    #    Cada seção é um `div.ccu-section` com título + cartões; entre
+    #    elas, `connector` (seta SVG) visualiza o fluxo.
+    #    Notas (HTML) abaixo de cada seção exibem os parâmetros que
+    #    alimentaram os números (% por braço, etc.).
+    # -----------------------------------------------------------
     output$cards_resumo <- renderUI({
       dt <- dt_sum()
       tt <- cc_TOOLTIPS$resumo_geral_ccu
 
+      # Mensagem defensiva: engine retornou vazio/erro
       if (is.null(dt) || !nrow(dt)) {
         return(tags$div(
           div(style = "margin:6px; opacity:0.8;", "No data for the current selection.")
@@ -240,6 +167,7 @@ mod_resumo_geral_server <- function(
 
       g <- input_global()
 
+      # Helpers locais para formatar as notas (não exportados)
       num_or_na <- function(x) {
         x <- suppressWarnings(as.numeric(x))
         if (!is.finite(x) || is.na(x)) NA_real_ else x
@@ -249,7 +177,10 @@ mod_resumo_geral_server <- function(
         if (is.na(x)) "NA" else sprintf("%.2f%%", x)
       }
 
-      # SVG icons (22x22, stroke #fff, stroke-width 1.6)
+      # -- Ícones SVG inline (22x22, stroke #fff, stroke-width 1.6)
+      #    Pequenos o suficiente para colocar direto no card via HTML();
+      #    alternativa (sprite.svg em www/) foi avaliada e descartada pela
+      #    baixa contagem de ícones.
       ico_pop <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="18" cy="7" r="2.5"/><path d="M21 21v-1.5a3.5 3.5 0 0 0-2.5-3.35"/></svg>'
       ico_cal <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><polyline points="9,14 11.2,16.5 15.5,12"/></svg>'
       ico_tube <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v9l-4 6a1 1 0 0 0 .85 1.5h10.3A1 1 0 0 0 18 18l-4-6V3"/><line x1="8.5" y1="15" x2="15.5" y2="15"/></svg>'
@@ -258,6 +189,9 @@ mod_resumo_geral_server <- function(
       ico_cone <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="4" y2="18"/><line x1="12" y1="4" x2="20" y2="18"/><ellipse cx="12" cy="18" rx="8" ry="2.5"/><line x1="12" y1="6" x2="12" y2="15.5" stroke-dasharray="1.8 2"/></svg>'
       ico_refresh <- '<svg class="card-ccu-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>'
 
+      # Seta entre seções (renderizada 2× abaixo). `connector` é um
+      # objeto `div` — reutilizar o mesmo objeto é seguro (htmltools
+      # não o muta depois de criado).
       connector <- div(
         class = "ccu-connector",
         div(
@@ -266,6 +200,8 @@ mod_resumo_geral_server <- function(
         )
       )
 
+      # Fábrica de card (título + valor + ícone + tooltip HTML nativo).
+      # tooltip é aplicado via attr `title` (renderização pelo navegador).
       card <- function(label, value, icon_svg = NULL, tooltip = NULL) {
         div(
           class = "card-ccu",
@@ -277,7 +213,8 @@ mod_resumo_geral_server <- function(
       }
 
       # ---------------------------
-      # Notes (English)
+      # Notas (strings em inglês — padrão institucional do dashboard)
+      # Abaixo de cada seção exibimos os parâmetros-chave do cenário.
       # ---------------------------
       age_txt  <- sprintf("Ages %s\u2013%s", fmt_or_dash(s$target_age_min), fmt_or_dash(s$target_age_max))
       cov_txt  <- sprintf("Coverage %s%%", fmt_or_dash(s$coverage_percent))
@@ -311,20 +248,20 @@ mod_resumo_geral_server <- function(
         note_workup <- HTML(paste0(
           "First-time exams: ", pct2(g$first_time_pct),
           " &nbsp;&middot;&nbsp; Unsatisfactory: ", pct2(g$unsatisfactory_pct),
-          "<br/>Results \u2013 HSIL/ASC-H/AOI/AIS/Ca: ", pct2(g$res_asch_pct),
-          " &nbsp;&middot;&nbsp; Other abnorm.: ", pct2(g$res_other_pct),
+          "<br/>Results ASC-H+: ", pct2(g$res_asch_pct),
+          " &nbsp;&middot;&nbsp; Other abnormal: ", pct2(g$res_other_pct),
           " &nbsp;&middot;&nbsp; Negative: ", pct2(g$res_neg_pct),
-          "<br/>Colposcopy referral \u2013 HSIL arm: ", pct2(g$colpo_asch_pct),
-          " &nbsp;&middot;&nbsp; Other arm: ", pct2(g$colpo_other_follow_pct),
-          "<br/>Colposcopy positivity \u2013 HSIL arm: ", pct2(g$biopsy_pos_asch_pct),
-          " &nbsp;&middot;&nbsp; Other arm: ", pct2(g$biopsy_pos_other_pct)
+          "<br/>Colposcopy referral (ASC-H+): ", pct2(g$colpo_asch_pct),
+          " &nbsp;&middot;&nbsp; Other abnormal: ", pct2(g$colpo_other_follow_pct),
+          "<br/>Colposcopy positivity (ASC-H+): ", pct2(g$biopsy_pos_asch_pct),
+          " &nbsp;&middot;&nbsp; Other abnormal: ", pct2(g$biopsy_pos_other_pct)
         ))
 
         note_trt <- HTML(paste0(
-          "Biopsy (HSIL arm) \u2013 CIN2/3: ", pct2(g$b_asch_nic23_pct),
+          "Biopsy (ASC-H+) \u2013 CIN2/3: ", pct2(g$b_asch_nic23_pct),
           " &nbsp;&middot;&nbsp; Cancer: ", pct2(g$b_asch_cancer_pct),
           " &nbsp;&middot;&nbsp; Neg/CIN1: ", pct2(g$b_asch_neg_nic1_pct),
-          "<br/>Biopsy (Other arm) \u2013 CIN2/3: ", pct2(g$b_other_nic23_pct),
+          "<br/>Biopsy (Other abnormal) \u2013 CIN2/3: ", pct2(g$b_other_nic23_pct),
           " &nbsp;&middot;&nbsp; Cancer: ", pct2(g$b_other_cancer_pct),
           " &nbsp;&middot;&nbsp; Neg/CIN1: ", pct2(g$b_other_neg_nic1_pct),
           "<br/>EZT follow-up: 6 cytologies and 2 colposcopies per EZT"
@@ -332,7 +269,7 @@ mod_resumo_geral_server <- function(
       }
 
       # =========================
-      # 1) Target population
+      # Seção 1) Target population — pop elegível e pop rastreada/ano
       # =========================
       sec_target <- div(
         class = "ccu-section ccu-section-1",
@@ -346,7 +283,9 @@ mod_resumo_geral_server <- function(
       )
 
       # =========================
-      # 2) Work-up
+      # Seção 2) Work-up — encaminhamentos diagnósticos
+      #   HPV: cito reflexa + colposcopia + biópsia
+      #   Cito: cito diagnóstica + colposcopia + biópsia
       # =========================
       sec_workup <- if (identical(method, "hpv")) {
         div(
@@ -375,7 +314,9 @@ mod_resumo_geral_server <- function(
       }
 
       # =========================
-      # 3) Treatment and follow-up
+      # Seção 3) Treatment & follow-up — EZT + seguimento
+      #   HPV: EZT + follow-up HPV + follow-up colposcopia
+      #   Cito: EZT + citologias de seguimento + colposcopias de seguimento
       # =========================
       sec_trt <- if (identical(method, "hpv")) {
         div(
@@ -403,6 +344,8 @@ mod_resumo_geral_server <- function(
         )
       }
 
+      # Layout final: as 3 seções conectadas por setas (ccu-flow é o
+      # container flex definido em www/style.css).
       div(
         class = "ccu-flow",
         sec_target,
@@ -412,8 +355,8 @@ mod_resumo_geral_server <- function(
         sec_trt
       )
     })
-    
-    
-    
+
+
+
   })
 }

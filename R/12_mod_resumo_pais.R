@@ -1,13 +1,31 @@
 # ===========================================================
-# Shiny-cc — módulo: 12_mod_resumo_pais.R
-#   - Cards de resumo
-#   - Gráficos por idade
-#   - País vem dos filtros globais (input_global()$pais_sel)
+# Shiny-cc — módulo: 12_mod_resumo_pais.R  (aba Epidemiology)
+# -----------------------------------------------------------
+# Camada fina sobre `df_cc_completo` (população WPP 2025) e
+# `df_cc_taxas` (GLOBOCAN 2022). NÃO roda o engine: só resume
+# os dados epidemiológicos do país selecionado.
+#
+# Estrutura da UI (quando pop_mode != "other"):
+#   - 2 blocos escuros lado a lado:
+#       * Population (pop total + pop 25–64)
+#       * Incidence & Mortality (n casos/óbitos + ASR/100k)
+#   - 2 gráficos lado a lado:
+#       * Barras horizontais: % pop por faixa etária (2025)
+#       * Colunas agrupadas: rates incidence/mortality por idade
+# Quando pop_mode == "other" → mensagem "Not available".
+#
+# Dependências: fmt_int, fmt_rate (utils); AGE_ORDER, CC_COLORS
+# (constants); input_global()$pais_sel (filtro global).
 # ===========================================================
 mod_resumo_pais_ui <- function(id) {
   ns <- NS(id)
-  
-  # helper: card horizontal compacto para blocos escuros
+
+  # ---- helper local: card horizontal compacto (bloco escuro) -------
+  # label     : título curto (ex.: "Cervical cancer cases")
+  # value_out : textOutput principal (valor bold grande)
+  # foot_out  : textOutput secundário opcional (ex.: ano/país)
+  # ico       : htmltools::tag — ícone lateral
+  # asr_out / asr_label : texto "ASR per 100k women" (incidência/mortalidade)
   epi_card <- function(label, value_out, foot_out,
                        ico,
                        asr_out = NULL, asr_label = NULL) {
@@ -25,10 +43,12 @@ mod_resumo_pais_ui <- function(id) {
       
       # lado direito: ícone (+ ASR se fornecido)
       div(style = "flex-shrink:0; text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:2px;",
-          div(style = "color:rgba(255,255,255,0.7); font-size:18px;", ico),
+          # [C3] era rgba(255,255,255,0.7) → 0.85 (passa WCAG AA)
+          div(style = "color:rgba(255,255,255,0.85); font-size:18px;", ico),
           if (!is.null(asr_out)) tagList(
             div(style = "color:#fff; font-weight:700; font-size:18px; line-height:1.1;", asr_out),
-            div(style = "font-size:10px; color:rgba(255,255,255,0.5); line-height:1.3;", asr_label)
+            # [C2] era rgba(255,255,255,0.5) → 0.82; font-size:10px → var(--t-xs)
+            div(style = "font-size:var(--t-xs); color:rgba(255,255,255,0.82); line-height:1.3;", asr_label)
           )
       )
     )
@@ -39,6 +59,7 @@ mod_resumo_pais_ui <- function(id) {
       class = "cc-page-header",
       div(class = "cc-page-title", "Epidemiology"),
       div(class = "cc-page-subtitle", "World Population Prospects 2025 · GLOBOCAN 2022")
+      
     ),
     
     # --- caso população padrão (GLOBOCAN) ----------------------------
@@ -149,16 +170,24 @@ mod_resumo_pais_server <- function(id,
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-
+    # ---- 1. Seleção de país a partir do filtro global --------------
+    # O módulo depende APENAS de `pais_sel`. Coerção defensiva para
+    # integer; `req()` segura o pipeline até o input existir.
     sel_pais <- reactive({
       req(input_global()$pais_sel)
       as.integer(input_global()$pais_sel)
     })
 
+    # Nome legível do país (ex.: "Brazil") — usado nos footers e plots.
     nome_pais <- reactive({
       dim_country[population_code == sel_pais(), population_name][1]
     })
 
+    # ---- 2. Subset da base GLOBOCAN (linhas "Incidence" bastam) -----
+    # Por faixa etária, agrega as populações 2022 e 2025. Cada
+    # faixa retorna o primeiro valor não-NA (proteção contra colunas
+    # eventualmente preenchidas como character). Ordena por `age_code`
+    # e converte `age` em factor com a ordem canônica AGE_ORDER.
     df_pop <- reactive({
       df_completo[
         population_code == sel_pais() &
@@ -182,12 +211,21 @@ mod_resumo_pais_server <- function(id,
     })
 
 
+    # Tabela agregada de taxas GLOBOCAN 2022 (1 linha por país).
     df_tax <- reactive({
       df_taxas[population_code == sel_pais()]
     })
 
-    # ---- Cards -------------------------------------------------------
+    # ---- 3. Cards ---------------------------------------------------
+    # Todos seguem o mesmo padrão defensivo: calculam o agregado,
+    # verificam NA / não-finito / 0 e devolvem "–" como fallback.
+    # NOTA: os outputs `*_foot` (pop_total_foot, pop_2564_foot,
+    # inc_foot, mort_foot) estão definidos aqui mas a UI atual NÃO
+    # os consome — remanescentes de uma versão anterior com footer
+    # em cada card. Candidatos a limpeza.
 
+    # Total da população feminina 2025 — usa fmt_rate(..., 0) para
+    # evitar notação científica em países grandes.
     output$pop_total_txt <- renderText({
       df <- df_pop()
       x  <- suppressWarnings(as.numeric(df$pop_2025))
@@ -201,7 +239,10 @@ mod_resumo_pais_server <- function(id,
       paste0(nome_pais(), ", 2025")
     })
 
-    # Faixa alvo de rastreamento: 25–64 anos
+    # Faixa alvo de rastreamento: 25–64 anos (hard-coded aqui — NÃO
+    # depende dos sliders `target_age_*` da sidebar; serve como
+    # referência epidemiológica fixa). Soma as 8 faixas
+    # quinquenais entre 25 e 64.
     output$pop_2564_txt <- renderText({
       df <- df_pop()[age %in% c("25-29","30-34","35-39","40-44","45-49",
                                 "50-54","55-59","60-64")]
@@ -216,6 +257,8 @@ mod_resumo_pais_server <- function(id,
       paste0(nome_pais(), ", 2025")
     })
 
+    # Casos / óbitos absolutos (GLOBOCAN 2022) + ASR ajustada por idade
+    # (ASR world). `fmt_int` para inteiros, `fmt_rate(..., 1)` para ASR.
     output$inc_n_txt <- renderText({
       df <- df_tax()
       if (nrow(df) == 0) return("–")
@@ -244,8 +287,10 @@ mod_resumo_pais_server <- function(id,
       paste0(nome_pais(), ", 2022")
     })
 
-    # ---- Gráfico população 2025 -------------------------------------
-
+    # ---- 4. Gráfico de população (share por faixa etária, 2025) -----
+    # Barras horizontais: percentual da pop feminina total em cada
+    # faixa quinquenal (ordenada por AGE_ORDER). Label "X%" à direita
+    # de cada barra. Protegido contra NA / total 0.
     output$plot_pop <- renderPlot({
       df <- df_pop()
       if (nrow(df) == 0) return(NULL)
@@ -282,9 +327,13 @@ mod_resumo_pais_server <- function(id,
         )
     }, res = 110)
 
-    # ---- Gráfico taxas ----------------------------------------------
-
+    # ---- 5. Gráfico de taxas (incidência e mortalidade por idade) ---
+    # Colunas agrupadas por faixa etária. Calcula cases_2022/pop_2022
+    # por faixa (ambos para Incidence e Mortality) e multiplica por 1e5
+    # para obter taxas por 100k mulheres. Rótulo só aparece se rate > 0.
+    # As cores vêm de CC_COLORS$primary (incidência) e $forest (mortalidade).
     output$plot_rates <- renderPlot({
+      # Subset Incidence — 1 linha por faixa etária.
       inc <- df_completo[
         population_code == sel_pais() & type == "Incidence",
         .(cases_2022 = first(cases_2022), pop_2022 = first(pop_2022)),
@@ -293,6 +342,8 @@ mod_resumo_pais_server <- function(id,
 
       if (nrow(inc) == 0) return(NULL)
 
+      # Mesmo subset para Mortality; se não houver dados, rate_mort
+      # fica NA (colunas aparecem vazias, sem quebrar o plot).
       mort <- df_completo[
         population_code == sel_pais() & type == "Mortality",
         .(cases_2022 = first(cases_2022), pop_2022 = first(pop_2022)),

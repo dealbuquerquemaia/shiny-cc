@@ -1,8 +1,26 @@
 # ===========================================================
 # 16_mod_capacidade.R
-# Módulo Capacidade (CCU)
-#   - Totais realizados (SUS/SIA, 2024): citologia, colposcopia, biópsia, EZT
-#   - Comparativo: realizado vs necessidade estimada (mesmos exames)
+# Módulo Capacidade (aba "Capacity") — só ativo para Brasil
+#
+# O que faz:
+#   1. Lê produção real SUS/SIA 2024 (objeto `sia_cc_resumo`, gerado em
+#      data-raw/03_prepare_SUS.R), filtra pela geografia selecionada na
+#      sidebar (UF / Macro / Região / Município) e mostra 4 cards de
+#      "Procedure delivery" — totais de citologia, colposcopia, biópsia
+#      e EZT efetivamente realizados.
+#   2. Roda o engine (`cc_engine_run`) com os mesmos filtros para obter a
+#      necessidade anual estimada e cruza realizado × estimado em 4 cards
+#      de "Comparison" (% de cobertura por procedimento, com barra visual).
+#   3. Imprime uma nota metodológica detalhada com todos os parâmetros
+#      ativos do método selecionado (HPV ou Citologia).
+#
+# Fora do Brasil a aba renderiza placeholders ("–") e mensagem informando
+# que SUS/SIA só cobre o Brasil.
+#
+# Fluxo de dados:
+#   input_global() -> sia_filtered() -> realized_cap()  ┐
+#                                                       ├-> comp_dt() -> cards
+#   input_global() -> cfg_reactive() -> engine_res()    ┘
 # ===========================================================
 
 mod_capacity_ui <- function(id) {
@@ -80,7 +98,13 @@ mod_capacity_server <- function(id,
                                 regional_sus_map) {
   
   moduleServer(id, function(input, output, session) {
-    
+
+    # ============================================================
+    # Bloco 1 — Identificação do país (resolvido 1× + ci())
+    # Helper único cc_country_info() em 01_utils_cc.R devolve
+    # list(code, label, is_brazil) a partir de input_global() e
+    # dim_country. Substitui o trio replicado em 11/14/15/16/17.
+    # ============================================================
     # ---- código de Brazil na tabela de dimensões --------------------
     br_code <- tryCatch(
       {
@@ -89,42 +113,23 @@ mod_capacity_server <- function(id,
       },
       error = function(e) NA_integer_
     )
-    
-    # ---- país selecionado -------------------------------------------
-    country_code <- reactive({
-      req(input_global()$pais_sel)
-      as.integer(input_global()$pais_sel)
-    })
 
-    is_brazil <- reactive({
-      !is.na(br_code) && isTRUE(country_code() == br_code)
-    })
+    ci <- reactive(cc_country_info(input_global(), dim_country, br_code))
 
+    # ============================================================
+    # Bloco 2 — Helpers de geografia
+    # cap_geo_label : wrapper sobre cc_geo_label() em modo "shortest"
+    #                 com fallback non-Brasil "selected geography".
+    #                 Usada nos sub-rótulos dos cards de delivery.
+    # pick_all      : helper genérico (1 ou "primeiro (n=K)").
+    #                 Definida mas não usada em outro lugar — código
+    #                 morto, mesmo padrão dos módulos 11/14.
+    # ============================================================
     cap_geo_label <- function(g) {
-      if (!isTRUE(is_brazil())) return("selected geography")
-
-      pick <- function(x, what) {
-        if (is.null(x) || !length(x)) return(NULL)
-        x <- as.character(x)
-        x <- x[!is.na(x) & nzchar(x)]
-        if (!length(x)) return(NULL)
-        if (length(x) == 1L) return(paste0(what, ": ", x[1]))
-        paste0(what, " (n=", length(x), "): ", x[1])
-      }
-
-      mun   <- pick(g$filt_mun,   "Municipality")
-      reg   <- pick(g$filt_reg,   "Health region")
-      macro <- pick(g$filt_macro, "Macro-region")
-      uf    <- pick(g$filt_uf,    "State")
-
-      if (!is.null(mun))   return(mun)
-      if (!is.null(reg))   return(reg)
-      if (!is.null(macro)) return(macro)
-      if (!is.null(uf))    return(uf)
-
-      "Brazil"
+      cc_geo_label(g, mode = "shortest",
+                   non_br_label = "selected geography")
     }
-    
+
     pick_all <- function(x) {
       if (is.null(x) || !length(x)) return("–")
       x <- as.character(x)
@@ -134,113 +139,31 @@ mod_capacity_server <- function(id,
       paste0(x[1], " (n=", length(x), ")")
     }
     
-    country_label <- function(code) {
-      if (is.null(code) || is.na(code)) return("World")
-      nm <- tryCatch(
-        {
-          z <- dim_country[dim_country$population_code == code, "population_name"]
-          if (length(z) == 0L || is.na(z[1])) "Selected country" else as.character(z[1])
-        },
-        error = function(e) "Selected country"
-      )
-      nm
-    }
-    
+    # ============================================================
+    # Bloco 3 — Subtítulo do header (geografia)
+    # Fora do Brasil: nome do país (ou "World").
+    # No Brasil: concatena "Brazil - UF - Macro - Região - Município",
+    # incluindo só os níveis com seleção. Múltiplas seleções viram
+    # "Primeiro (n=K)". Padrão idêntico ao Summary/Equipment via
+    # helper único cc_geo_label() em 01_utils_cc.R.
+    # ============================================================
     output$geo_desc <- renderText({
-      g <- input_global()
-      
-      # Mundo / País
-      if (!isTRUE(is_brazil())) {
-        return(country_label(country_code()))
-      }
-      
-      parts <- c("Brazil")
-      
-      add_if <- function(x, prefix = NULL) {
-        x <- if (is.null(x) || !length(x)) character(0) else as.character(x)
-        x <- x[!is.na(x) & nzchar(x)]
-        if (!length(x)) return(invisible(NULL))
-        
-        lab <- if (length(x) == 1L) x[1] else paste0(x[1], " (n=", length(x), ")")
-        if (!is.null(prefix)) lab <- paste0(prefix, ": ", lab)
-        parts <<- c(parts, lab)
-      }
-      
-      add_if(g$filt_uf)     # UF
-      add_if(g$filt_macro)  # Macro
-      add_if(g$filt_reg)    # Região
-      add_if(g$filt_mun)    # Município
-      
-      paste(parts, collapse = " - ")
+      cc_geo_label(input_global(), mode = "concat",
+                   dim_country = dim_country, br_code = br_code)
     })
     
+    # ============================================================
+    # Bloco 4 — Engine: necessidade estimada
+    # Mesmo padrão dos demais módulos: empacota input_global() em
+    # cc_engine_settings() e roda cc_engine_run(). Aqui só $metrics
+    # (procedimentos anuais) é consumido pelo comparativo.
+    # ============================================================
     # ---- Engine (necessidade) --------------------------------------
+    # Wrapper único: cc_cfg_from_input() em 02_engine_capacity_cc.R
+    # encapsula a tradução input_global() → cc_engine_settings() e é
+    # compartilhado entre Summary/Equipment/Pathway/Capacity/Compare.
     cfg_reactive <- reactive({
-      g <- input_global()
-      
-      cc_engine_settings(
-        country_code     = country_code(),
-        pop_mode         = g$pop_mode %||% "globocan",
-        coverage         = g$coverage %||% 70,
-        screen_method    = g$screen_method %||% "hpv",
-        target_age_min   = g$target_age_min %||% 25,
-        target_age_max   = g$target_age_max %||% 64,
-        custom_pop       = g$custom_pop %||% NA_real_,
-        
-        # HPV
-        p16_18       = g$p16_18,
-        poutros      = g$poutros,
-        pneg         = g$pneg,
-        cito_out_pos = g$cito_out_pos,
-        cito_out_neg = g$cito_out_neg,
-        colpo16_pos  = g$colpo16_pos,
-        colpo16_neg  = g$colpo16_neg,
-        colpoout_pos = g$colpoout_pos,
-        colpoout_neg = g$colpoout_neg,
-        b16_neg_nic1 = g$b16_neg_nic1,
-        b16_nic23    = g$b16_nic23,
-        b16_cancer   = g$b16_cancer,
-        bo_neg_nic1  = g$bo_neg_nic1,
-        bo_nic23     = g$bo_nic23,
-        bo_cancer    = g$bo_cancer,
-        
-        # citologia (novo modelo)
-        first_time_pct         = g$first_time_pct,
-        unsatisfactory_pct     = g$unsatisfactory_pct,
-        
-        res_asch_pct           = g$res_asch_pct,
-        res_other_pct          = g$res_other_pct,
-        res_neg_pct            = g$res_neg_pct,
-        
-        colpo_asch_pct         = g$colpo_asch_pct,
-        colpo_other_follow_pct = g$colpo_other_follow_pct,
-        
-        biopsy_pos_asch_pct    = g$biopsy_pos_asch_pct,
-        biopsy_pos_other_pct   = g$biopsy_pos_other_pct,
-        
-        b_asch_nic23_pct       = g$b_asch_nic23_pct,
-        b_asch_cancer_pct      = g$b_asch_cancer_pct,
-        b_asch_neg_nic1_pct    = g$b_asch_neg_nic1_pct,
-        
-        b_other_nic23_pct      = g$b_other_nic23_pct,
-        b_other_cancer_pct     = g$b_other_cancer_pct,
-        b_other_neg_nic1_pct   = g$b_other_neg_nic1_pct,
-        
-        
-        # capacidades
-        cap_colpo_device = g$cap_colpo_device,
-        cap_colpo_med    = g$cap_colpo_med,
-        cap_citopato     = g$cap_citopato,
-        cap_patol_med    = g$cap_patol_med,
-        
-        # Brasil subnacional
-        is_brazil   = g$is_brazil,
-        br_pop_tipo = g$br_pop_tipo,
-        filt_uf     = g$filt_uf,
-        filt_macro  = g$filt_macro,
-        filt_reg    = g$filt_reg,
-        filt_mun    = g$filt_mun
-      )
+      cc_cfg_from_input(input_global(), br_code)
     })
     
     engine_res <- reactive({
@@ -252,27 +175,36 @@ mod_capacity_server <- function(id,
       )
     })
     
+    # ============================================================
+    # Bloco 5 — Produção real SUS/SIA (filtrada por geografia)
+    #
+    # Espera o objeto `sia_cc_resumo` no novo formato (gerado por
+    # data-raw/03_prepare_SUS.R como `sus_proc_resumo.rds`):
+    #   geo_ref ('care' ou 'res'), categoria, total_all, total_25_64,
+    #   UF, "Macrorregiao de Saude", "Regiao de Saude", Municipio.
+    #
+    # Filtros aplicados em ordem:
+    #   1) geo_ref (atendimento × residência)  — input_global()$sia_geo_ref
+    #   2) UF / Macro / Região / Município     — filt_uf/macro/reg/mun
+    # Devolve NULL se não-Brasil ou se filtro zerar todas as linhas.
+    # ============================================================
     # ---- SUS resumo (produção real) — já regionalizado e leve --------
     sia_filtered <- reactive({
-      if (!is_brazil()) return(NULL)
+      if (!ci()$is_brazil) return(NULL)
       
       g  <- input_global()
       dt <- data.table::as.data.table(sia_cc_resumo)
       
       # Espera-se o novo dataset "sus_proc_resumo":
-      # geo_ref, categoria, total_all, total_25_64, e geografia já mergeada (UF/macro/reg/mun)
-      needed <- c(
-        "geo_ref", "categoria", "total_all", "total_25_64",
-        "UF", "Macrorregiao de Saude", "Regiao de Saude", "Municipio"
+      # geo_ref, categoria, total_all, total_25_64, e geografia já mergeada (UF/macro/reg/mun).
+      # Validação delegada a cc_check_schema() (utils) — falha cedo via stop().
+      cc_check_schema(
+        dt,
+        c("geo_ref", "categoria", "total_all", "total_25_64",
+          "UF", "Macrorregiao de Saude", "Regiao de Saude", "Municipio"),
+        context = "mod_capacidade:sia_filtered",
+        on_fail = "stop"
       )
-      miss <- setdiff(needed, names(dt))
-      if (length(miss)) {
-        stop(
-          "Capacidade: dataset SUS resumo não tem colunas esperadas: ",
-          paste(miss, collapse = ", "),
-          call. = FALSE
-        )
-      }
       
       geo_ref_sel <- g$sia_geo_ref
       if (is.null(geo_ref_sel) || !geo_ref_sel %in% c("care", "res")) geo_ref_sel <- "care"
@@ -294,16 +226,29 @@ mod_capacity_server <- function(id,
     
     
     
+    # ============================================================
+    # Bloco 6 — Totais SUS/SIA 2024 (delivery cards)
+    # Agrega o data.table filtrado em escalares por categoria via
+    # cc_capacity_from_sia (engine). Resultado consumido pelos 4
+    # cards da Section 1 — Procedure delivery.
+    # ============================================================
     # ---- Totais (SIA 2024) ------------------------------------------
     realized_cap <- reactive({
       dt <- sia_filtered()
       if (is.null(dt)) return(NULL)
       cc_capacity_from_sia(dt, ano_cmp_ref = 2024L)
     })
-    
+
+    # ============================================================
+    # Bloco 7 — Comparativo realizado × necessidade
+    # mod_capacity_compare (engine) cruza os 5 itens (citologia,
+    # colposcopia, biópsia, anatomo, tratamento) e devolve
+    # ratio_realized_needed + coverage_percent. Aqui filtramos só
+    # os 4 itens exibidos nos cards (anatomo é omitido).
+    # ============================================================
     # ---- Comparativo (realizado vs necessidade) ----------------------
     comp_dt <- reactive({
-      if (!is_brazil()) return(data.table::data.table())
+      if (!ci()$is_brazil) return(data.table::data.table())
       res_engine <- engine_res()
       cap        <- realized_cap()
       if (is.null(res_engine) || is.null(cap)) return(data.table::data.table())
@@ -314,6 +259,15 @@ mod_capacity_server <- function(id,
       d[item %chin% c("citologia_total", "colposcopia_total", "biopsia_total", "tratamento_total")]
     })
     
+    # ============================================================
+    # Bloco 8 — Helpers de KPI e títulos dinâmicos das Sections
+    # txt_na_val / txt_na_sub : placeholders para fora do Brasil
+    # cap_sub                 : sub-rótulo "SUS/SIA 2024 — <geo>"
+    # geo_name_label          : nome geo mais específico (sem prefixo)
+    # output$delivery_title   : "Procedure delivery — <suffix>"
+    # output$comp_title       : "Actual production vs. estimated need —
+    #                            SIA by place of <care|residence>"
+    # ============================================================
     # ---- KPI helpers -------------------------------------------------
     txt_na_val <- function() "–"
     txt_na_sub <- function() "Data not available – only Brazil (SUS, 2024)"
@@ -323,18 +277,17 @@ mod_capacity_server <- function(id,
       paste0("SUS/SIA 2024 \u2014 ", cap_geo_label(g))
     }
 
-    # Most specific geographic name without "Type: " prefix
+    # Most specific geographic name without level prefix.
+    # Wrapper sobre cc_geo_label() em modo "shortest" sem level_label,
+    # multi format "(+K-1)", devolvendo NULL quando não há filtro.
+    # Gate explícito em is_brazil para preservar semântica do original
+    # (chamado antes do gate em delivery_title).
     geo_name_label <- function(g) {
-      pick_name <- function(x) {
-        if (is.null(x) || !length(x)) return(NULL)
-        x <- as.character(x[!is.na(x) & nzchar(x)])
-        if (!length(x)) return(NULL)
-        if (length(x) == 1L) x[1L] else paste0(x[1L], " (+", length(x) - 1L, ")")
-      }
-      pick_name(g$filt_mun)   %||%
-        pick_name(g$filt_reg)   %||%
-        pick_name(g$filt_macro) %||%
-        pick_name(g$filt_uf)
+      if (!isTRUE(ci()$is_brazil)) return(NULL)
+      cc_geo_label(g, mode = "shortest",
+                   level_label = FALSE,
+                   multi_format = "increment",
+                   br_empty_label = NULL)
     }
 
     # Section 1 title (reactive)
@@ -342,7 +295,7 @@ mod_capacity_server <- function(id,
       g   <- input_global()
       geo <- geo_name_label(g)
 
-      suffix <- if (!isTRUE(is_brazil())) {
+      suffix <- if (!isTRUE(ci()$is_brazil)) {
         "SUS/SIA 2024"
       } else if (!is.null(geo)) {
         geo
@@ -365,51 +318,68 @@ mod_capacity_server <- function(id,
           paste0("Actual production vs. estimated need \u2014 ", sia_lbl))
     })
 
+    # ============================================================
+    # Bloco 9 — Section 1 — Procedure delivery (4 cards SIA)
+    # Estrutura repetitiva: cada card tem _value (número formatado)
+    # e _sub (rótulo "SUS/SIA 2024 — <geo>"). Fora do Brasil exibe
+    # placeholder. Todos consomem o mesmo realized_cap().
+    # ============================================================
     output$citologia_value <- renderText({
-      if (!is_brazil()) return(txt_na_val())
+      if (!ci()$is_brazil) return(txt_na_val())
       c <- realized_cap()
       if (is.null(c) || is.na(c$citologia_total)) return(txt_na_val())
       fmt_int(c$citologia_total)
     })
     output$citologia_sub <- renderText({
-      if (!is_brazil()) return(txt_na_sub())
+      if (!ci()$is_brazil) return(txt_na_sub())
       cap_sub()
     })
     
     output$colpo_value <- renderText({
-      if (!is_brazil()) return(txt_na_val())
+      if (!ci()$is_brazil) return(txt_na_val())
       c <- realized_cap()
       if (is.null(c) || is.na(c$colposcopia_total)) return(txt_na_val())
       fmt_int(c$colposcopia_total)
     })
     output$colpo_sub <- renderText({
-      if (!is_brazil()) return(txt_na_sub())
+      if (!ci()$is_brazil) return(txt_na_sub())
       cap_sub()
     })
     
     output$biopsia_value <- renderText({
-      if (!is_brazil()) return(txt_na_val())
+      if (!ci()$is_brazil) return(txt_na_val())
       c <- realized_cap()
       if (is.null(c) || is.na(c$biopsia_total)) return(txt_na_val())
       fmt_int(c$biopsia_total)
     })
     output$biopsia_sub <- renderText({
-      if (!is_brazil()) return(txt_na_sub())
+      if (!ci()$is_brazil) return(txt_na_sub())
       cap_sub()
     })
     
     output$ezt_value <- renderText({
-      if (!is_brazil()) return(txt_na_val())
+      if (!ci()$is_brazil) return(txt_na_val())
       c <- realized_cap()
       if (is.null(c) || is.na(c$tratamento_total)) return(txt_na_val())
       fmt_int(c$tratamento_total)
     })
     output$ezt_sub <- renderText({
-      if (!is_brazil()) return(txt_na_sub())
+      if (!ci()$is_brazil) return(txt_na_sub())
       cap_sub()
     })
     
     ######################Cards Comparativos###################################
+    # ============================================================
+    # Bloco 10 — Section 2 — Cards de comparação (realizado × estimado)
+    # 3 helpers + 1 renderUI:
+    #   ratio_vals     : extrai pct/pct_num/sub de uma linha de comp_dt;
+    #                    devolve placeholders se ausente.
+    #   bar_indicator  : barra horizontal verde-claro/médio/escuro
+    #                    proporcional ao % (com seta de overflow se ≥100).
+    #   comp_card_ui   : monta um cartão branco (titulo + pct + sub + bar).
+    #   output$cap_comp_cards : renderiza os 4 cards (Cytology / Colposcopy
+    #                           / Biopsies / EZT) ou placeholders fora do BR.
+    # ============================================================
 
     # Returns list(pct, pct_num, sub) from comp_dt row
     ratio_vals <- function(d_all, item_name) {
@@ -486,7 +456,7 @@ mod_capacity_server <- function(id,
         sub     = "Data not available \u2013 only Brazil (SUS, 2024)"
       )
 
-      if (!isTRUE(is_brazil())) {
+      if (!isTRUE(ci()$is_brazil)) {
         return(div(
           class = "comp-cards-row",
           comp_card_ui("Cytology",   na_rv, cc_TOOLTIPS$capacidade_ccu$comp_citologia),
@@ -510,9 +480,17 @@ mod_capacity_server <- function(id,
         comp_card_ui("EZT",        ez, cc_TOOLTIPS$capacidade_ccu$comp_ezt)
       )
     })
+    # ============================================================
+    # Bloco 11 — Nota metodológica abaixo dos cards
+    # Imprime em HTML (3 linhas separadas por <br/>) o resumo do
+    # cenário ativo: faixa etária + cobertura + intervalo, e os
+    # parâmetros do método selecionado (HPV ou Citologia).
+    # Replica os helpers fmt_or_dash / num_or_na / pct2 que também
+    # existem em 11/14 (ver pendência sobre helpers compartilhados).
+    # ============================================================
     output$cap_comp_note <- renderUI({
       g <- input_global()
-      
+
       fmt_or_dash <- function(x) {
         if (is.null(x) || length(x) == 0L || is.na(x)) "–" else fmt_int(round(as.numeric(x)))
       }
@@ -561,23 +539,23 @@ mod_capacity_server <- function(id,
           "Cytology volume parameters: first-time exams = ", pct2(g$first_time_pct),
           "; unsatisfactory exams = ", pct2(g$unsatisfactory_pct), ".",
           "<br/>",
-          "Cytology results: HSIL / ASC-H / AOI / AIS / Carcinoma = ", pct2(g$res_asch_pct),
-          "; other abnormalities = ", pct2(g$res_other_pct),
+          "Cytology results: ASC-H+ = ", pct2(g$res_asch_pct),
+          "; other abnormal = ", pct2(g$res_other_pct),
           "; negative = ", pct2(g$res_neg_pct), ".",
           "<br/>",
-          "Colposcopy referral: after HSIL / ASC-H / AOI / AIS / Carcinoma = ", pct2(g$colpo_asch_pct),
-          "; after other abnormalities = ", pct2(g$colpo_other_follow_pct), ".",
+          "Colposcopy referral: (ASC-H+) = ", pct2(g$colpo_asch_pct),
+          "; after other abnormal = ", pct2(g$colpo_other_follow_pct), ".",
           "<br/>",
-          "Colposcopy positivity (biopsy indication): HSIL / ASC-H / AOI / AIS / Carcinoma arm = ", pct2(g$biopsy_pos_asch_pct),
-          "; other abnormalities arm = ", pct2(g$biopsy_pos_other_pct), "."
+          "Colposcopy positivity (biopsy indication): ASC-H+ = ", pct2(g$biopsy_pos_asch_pct),
+          "; other abnormal = ", pct2(g$biopsy_pos_other_pct), "."
         )
         
         note_trt <- paste0(
-          "Biopsy outcomes (HSIL / ASC-H / AOI / AIS / Carcinoma arm): CIN2/3 = ", pct2(g$b_asch_nic23_pct),
+          "Biopsy outcomes (ASC-H+): CIN2/3 = ", pct2(g$b_asch_nic23_pct),
           "; cancer = ", pct2(g$b_asch_cancer_pct),
           "; negative/CIN1 = ", pct2(g$b_asch_neg_nic1_pct), ".",
           "<br/>",
-          "Biopsy outcomes (Other abnormalities arm): CIN2/3 = ", pct2(g$b_other_nic23_pct),
+          "Biopsy outcomes (Other abnormal): CIN2/3 = ", pct2(g$b_other_nic23_pct),
           "; cancer = ", pct2(g$b_other_cancer_pct),
           "; negative/CIN1 = ", pct2(g$b_other_neg_nic1_pct), ".",
           "<br/>",

@@ -1,7 +1,27 @@
 # ===========================================================
 # Shiny-cc — 99_mod_sobre.R
+# Módulo "About NEEDS-BR" — página estática (sem reatividade).
+#
+# Particularidades:
+#   - **Único módulo 100% estático** do app: nenhum reactive, observer ou
+#     output render. O server é uma função vazia `mod_sobre_server`.
+#   - **Único módulo cuja função server NÃO segue o padrão `moduleServer(id, ...)`**
+#     — é uma função top-level `mod_sobre_server(input, output, session)`
+#     herdada do estilo Shiny clássico. Funciona porque não há nada para
+#     namespacear (sem `ns()`, sem outputs).
+#   - UI usa `fluidPage` em vez do padrão `tagList(div(...))` dos outros módulos
+#     (decisão herdada do template inicial — pode ser uniformizada).
+#   - Conteúdo bilíngue: textos em inglês (público IARC/internacional);
+#     créditos institucionais (IARC + FSP-USP + ConeCta-SP) e logos como
+#     assets em `www/`.
+#   - `format(Sys.Date(), ...)` em "Last update" é avaliado **na hora da
+#     renderização** (não em build time) — exibe a data corrente da sessão.
+#     Comportamento intencional, mas vale revisar em deploys de longa duração.
 # ===========================================================
 
+# ── UI ──────────────────────────────────────────────────────────────────────
+# Layout 2 colunas: esquerda (8/12) com Overview/Features/Data; direita (4/12)
+# com card de créditos + logos institucionais.
 mod_sobre_ui <- function(id) {
   ns <- NS(id)
   
@@ -11,7 +31,7 @@ mod_sobre_ui <- function(id) {
       
       h2(
         "About NEEDS-BR",
-        style = "color:var(--cc-primary-dark); font-weight:700; margin-bottom:6px;"
+        style = "color:var(--cc-dark); font-weight:700; margin-bottom:6px;"
       ),
       p(
         style = "font-size:16px; color:var(--cc-gray1); margin-bottom:18px;",
@@ -93,4 +113,8 @@ mod_sobre_ui <- function(id) {
   )
 }
 
+# ── Server ──────────────────────────────────────────────────────────────────
+# Vazio por design — a aba About não tem reatividade. Mantido para preservar
+# o contrato de "todo módulo tem _ui + _server". Diferente dos demais módulos,
+# usa assinatura clássica (input, output, session) em vez de `moduleServer`.
 mod_sobre_server <- function(input, output, session) {}

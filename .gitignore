@@ -18,6 +18,7 @@ data-raw/sia_cc_completo.rds
 *.parquet
 
 docs/
+prints_app/
 
 # misc
 .DS_Store
@@ -30,3 +31,4 @@ rsconnect/
 
 # Claude Code local settings
 .claude/settings.local.json
+.positai

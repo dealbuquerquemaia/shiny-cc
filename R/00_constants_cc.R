@@ -1,19 +1,39 @@
 # ===========================================================
 # Shiny-cc — R/00_constants_cc.R
-# Constants; colors; default parameters
+# -----------------------------------------------------------
+# Constantes globais do app. Carregado antes de todos os módulos
+# (via `source()` em app.R). Fornece:
+#   - Ordenações canônicas de faixa etária e tipo (AGE_ORDER, TYPE_ORDER)
+#   - Paleta de cores institucional (CC_COLORS, PALETTE_MAIN)
+#   - Defaults de parâmetros do modelo HPV (HPV_DEFAULTS)
+#   - Presets fechados por fonte de dados HPV (HPV_PRESETS)
+#   - Defaults de parâmetros do modelo Citologia (CITO_DEFAULTS)
+#   - Metadados dos presets de Citologia (CITO_PRESETS_META)
+#     — os valores numéricos vivem em data/cito_presets.rds
+#   - Tooltips exibidos nos cards de cada aba (cc_TOOLTIPS)
+#
+# Consumidores: todos os módulos (`R/10_*.R`..`R/99_*.R`) e o engine.
+# Para adicionar um novo preset HPV, acrescentar uma entrada em HPV_PRESETS.
+# Para adicionar um novo preset Citologia, atualizar `07_prepare_cito_presets.R`
+# e regenerar `data/cito_presets.rds` + acrescentar entrada em CITO_PRESETS_META.
 # ===========================================================
 
+# Ordem canônica das faixas etárias GLOBOCAN (usada para factor em gráficos/tabelas).
 AGE_ORDER <- c(
   "0-4","5-9","10-14","15-19","20-24","25-29",
   "30-34","35-39","40-44","45-49","50-54","55-59",
   "60-64","65-69","70-74","75-79","80-84","85+"
 )
 
+# Ordem canônica dos tipos de métrica epidemiológica (aba Epidemiology).
 TYPE_ORDER <- c("Incidence", "Mortality")
 
+# Rótulo de sexo — CCU só tem "Female"; mantido por consistência de API.
 SEX_LABELS <- c(Female = "Female")
 
 # --- CORES ---
+# Paleta principal (verde-azulado institucional ConeCta/IARC/FSP).
+# Usada em CSS customizado (www/style.css) e em gráficos ggplot.
 CC_COLORS <- list(
   primary        = "#4ABDAC",
   primary_dark   = "#0B7285",
@@ -29,6 +49,7 @@ CC_COLORS <- list(
   white          = "#FFFFFF"
 )
 
+# Vetor de 10 cores para séries em gráficos (ordem do claro ao escuro).
 PALETTE_MAIN <- c(
   CC_COLORS$primary_dark,
   CC_COLORS$petrol,
@@ -43,6 +64,15 @@ PALETTE_MAIN <- c(
 )
 
 # ---- Defaults HPV (percentuais em %) ----
+# Parâmetros-padrão do modelo de rastreamento com HPV (rastreamento a cada 5 anos).
+# Origem: estudo PREVENTIVO (Indaiatuba). Usados quando nenhum preset está ativo
+# e na primeira renderização do painel "Customize".
+# Nomenclatura:
+#   - p16_18, poutros, pneg  → prevalências no teste HPV (16/18+, outros HR+, neg)
+#   - cito_out_*             → resultados da citologia reflexa (outros HR-HPV+)
+#   - colpo16_*, colpoout_*  → positividade da colposcopia por braço (16/18 vs outros)
+#   - b16_*, bo_*            → desfechos da biópsia: neg/NIC1 | NIC2+ | cancer, por braço
+#   - hpv_followup_pos_pct   → % de positividade em teste HPV de seguimento (6 e 18 meses)
 HPV_DEFAULTS <- list(
   p16_18       = 3.43231398040085,
   poutros      = 9.26281577781061,
@@ -119,7 +149,10 @@ CITO_PRESETS_META <- list(
   )
 )
 
-# ---- Tooltips (CCU) — Summary cards ----
+# ---- Tooltips (CCU) — textos de ajuda por card/indicador ----
+# Estrutura: cc_TOOLTIPS$<aba>$<subgrupo>$<nome_do_campo>.
+# Consumidos pelos módulos via `cc_TOOLTIPS[["nome_aba"]]` (ver R/10..99).
+# Textos em inglês porque o app é bilíngue (labels default em EN).
 if (!exists("cc_TOOLTIPS", inherits = FALSE)) cc_TOOLTIPS <- list()
 
 cc_TOOLTIPS$resumo_geral_ccu <- list(
@@ -140,8 +173,8 @@ cc_TOOLTIPS$resumo_geral_ccu <- list(
   ),
   cytology = list(
     cit_rastreamento      = "Screening cytologies per year: eligible/3 + eligible×first-time% + eligible×unsatisfactory%.",
-    cit_diagnostica       = "Diagnostic (repeat) cytologies: screening cytologies × proportion with 'Other abnormalities'.",
-    colpo_indicada        = "Initial colposcopies: (HSIL / ASC-H / AOI / AIS / Carcinoma cytologies × colposcopy after HSIL / ASC-H / AOI / AIS / Carcinoma) + (Other abnormalities × colposcopy after other abnormalities).",
+    cit_diagnostica       = "Diagnostic (repeat) cytologies: screening cytologies × proportion with 'Other abnormal'.",
+    colpo_indicada        = "Initial colposcopies: (HSIL / ASC-H / AOI / AIS / Carcinoma cytologies × colposcopy after HSIL / ASC-H / AOI / AIS / Carcinoma) + (Other abnormal × colposcopy after other abnormalities).",
     biopsia_indicada      = "Biopsies indicated: initial colposcopies × colposcopy positivity (biopsy indication), for each arm (HSIL / ASC-H / AOI / AIS / Carcinoma and Other).",
     followup_cytologies   = "Follow-up cytologies: negative colposcopies + (biopsy negative/NIC1) + (EZT × 6 follow-up cytologies).",
     followup_colposcopies = "Follow-up colposcopies: negative colposcopies + (EZT × 2 follow-up colposcopies).",

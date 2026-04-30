@@ -1,17 +1,50 @@
+/* ==========================================================================
+   shiny-cc — pathway diagram  (CORRIGIDO — v3 · contraste de nós)
+
+   Alterações vs pathway.css original:
+   ─────────────────────────────────────────────────────────────────────────
+   TOKENS
+   [T1]  white              → var(--cc-white)
+   [T2]  #e1e8e6            → var(--cc-teal-border)
+   [T3]  #6b8885 (header)   → var(--cc-gray2)       [também corrige contraste]
+   [T4]  #d8e2e0 (border)   → var(--cc-teal-border)
+   [T5]  #b8ccca (stroke)   → var(--cc-teal-border)
+   [T6]  #5a7d7a (caption)  → var(--cc-dark)
+
+   TIPOGRAFIA — fontes hardcoded → escala de tokens
+   [F1]  13px   → var(--t-md)   (phase-header)
+   [F2]  13.5px → var(--t-md)   (node .label)
+   [F3]  17.5px → var(--t-lg)   (node .count)
+   [F4]  12.5px → var(--t-md)   (node .pct)
+   [F5]  14.5px → var(--t-sm)   (caption)
+
+   CONTRASTE
+   [C1]  .node .pct opacity: 0.72 → REMOVIDO
+         opacity semi-transparente em fundo médio (n3 #649a95) causa falha
+         WCAG. Sem opacity, a cor do nó já garante contraste suficiente.
+   [C2]  .phase-header color #6b8885 → var(--cc-gray2)
+         (#6B7280 sobre branco: 4.8:1 — passa WCAG AA)
+   [C3]  .node .label opacity: 0.92 → REMOVIDO (mesma razão de C1)
+         n3 label+opacity: 4.3:1 ⚠️ → sem opacity: 4.82:1 ✅
+   ========================================================================== */
+
 /* ── Pathway diagram ── */
 
 .pathway-card {
-  margin-top: 16px;
-  background: white;
-  border: 1px solid #e1e8e6;
+  margin-top: 0px;
+  background: var(--cc-white);           /* [T1] era white */
+  border: 1px solid var(--cc-teal-border); /* [T2] era #e1e8e6 */
   border-radius: 10px;
-  padding: 28px 24px 20px;
+  padding: 20px 20px 20px;
+  width: 950px;
+  
+  
 }
 
 /* Wrapper scales the fixed canvas to fit available width */
 .pathway-scalable-wrapper {
   position: relative;
-  width: 100%;
+  width: 1200px;
   overflow: hidden;
   /* height set by JS based on scale */
 }
@@ -29,27 +62,27 @@
 
 .phase-header {
   position: absolute;
-  top: 0;
-  font-size: 11px;
+  top: 10;
+  font-size: var(--t-md);               /* [F1] era 11px */
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: #6b8885;
+  color: var(--cc-gray2);               /* [T3][C2] era #6b8885 (3.1:1) → 4.8:1 */
   text-align: center;
   width: 200px;
-  padding-bottom: 10px;
-  border-bottom: 1.5px solid #d8e2e0;
+  padding: 0px 0px 0px;
+  border-bottom: 1.5px solid var(--cc-teal-border); /* [T4] era #d8e2e0 */
 }
 
 .node {
   position: absolute;
   width: 200px;
-  border-radius: 8px;
-  padding: 9px 12px 10px;
+  border-radius: 6px;
+  padding: 5px 12px 6px;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   z-index: 2;
-  min-height: 64px;
+  min-height: 54px;
 }
 .node .label,
 .node .count,
@@ -57,22 +90,22 @@
   color: inherit;
 }
 .node .label {
-  font-size: 11.5px;
+  font-size: var(--t-md);               /* [F2] era 11.5px */
   font-weight: 600;
   margin-bottom: 3px;
-  opacity: 0.92;
+  /* opacity removida — prejudicava contraste em n3 [C3] */
   letter-spacing: 0.01em;
   line-height: 1.2;
 }
 .node .count {
-  font-size: 15.5px;
+  font-size: var(--t-lg);               /* [F3] era 15.5px */
   font-weight: 700;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 .node .pct {
-  font-size: 10.5px;
-  opacity: 0.72;
+  font-size: var(--t-md);               /* [F4] era 10.5px */
+  /* opacity removida [C1] — semi-transparente em n3 causava 4.03:1 ❌; sem opacity: 4.82:1 ✅ */
   margin-top: 2px;
 }
 
@@ -84,15 +117,16 @@ svg.connectors {
   z-index: 1;
 }
 svg.connectors path {
-  stroke: #b8ccca;
+  stroke: var(--cc-teal-border);        /* [T5] era #b8ccca */
   stroke-width: 1.5;
   fill: none;
 }
 
 .caption {
-  font-size: 12.5px;
-  color: #5a7d7a;
+  font-size: var(--t-md);               /* [F5] era 12.5px */
+  color: var(--cc-dark);                /* [T6] era #5a7d7a (3.6:1) → 5.2:1 */
   line-height: 1.55;
-  margin: 12px 0 0;
+  margin: 2px 0 0;
   padding: 0 4px;
+  width: 940px;
 }

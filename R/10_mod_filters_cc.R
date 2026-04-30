@@ -1,8 +1,41 @@
 # ===========================================================
 # 10_mod_filters_cc.R
 # Módulo de filtros globais — Cervical Cancer Screening
+# -----------------------------------------------------------
+# Responsabilidade:
+#   Renderiza a sidebar (accordion com 4 seções: Population,
+#   Screening protocol, Screening coverage, Resources) e produz
+#   o reactive `input_global()` consumido por TODOS os demais
+#   módulos.
+#
+# Pontos importantes:
+#   - Toda seleção geográfica (país, UF, macro, região, município)
+#     vive aqui. Nenhum outro módulo define seus próprios seletores.
+#   - Cascata UF → macro → reg → município é feita por
+#     `updateSelectizeInput(server = TRUE)` e só é ativada quando
+#     o país selecionado é o Brasil.
+#   - Presets HPV: ao selecionar uma fonte (ex.: Indaiatuba), os 16
+#     campos numéricos são preenchidos automaticamente. Passar para
+#     "Customize" libera edição manual.
+#   - Presets Citologia: lógica adicional por UF — SISCAN + 1 UF →
+#     parâmetros daquela UF; SISCAN + 0 ou N UFs → fallback Brasil.
+#     Somente 4 parâmetros variam por UF (ver README).
+#   - Auto-balance: quando "Lock proportions while editing" está
+#     marcado, pares/trios de % são mantidos somando 100 via
+#     `lock_pair()` / `lock_triplet()`.
+#   - Capacidades: input entra em Dia/Sem/Mês/Ano; o reactive de
+#     saída (`filters`) já devolve tudo ANUALIZADO via `cap_mult`.
 # ===========================================================
 
+# -----------------------------------------------------------
+# UI — sidebar com 4 seções em accordion
+# -----------------------------------------------------------
+# Args:
+#   id          - namespace do módulo
+#   dim_country - data.frame com population_code + population_name
+#                 (vem de df_dim_country)
+#   br_code     - código GLOBOCAN do Brasil; se NULL, tenta descobrir
+#                 na própria dim_country (fallback: 1001L)
 mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
   ns <- NS(id)
   
@@ -19,8 +52,12 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
   
   tagList(
     h3("Settings"),
-    
-    # ================= POPULAÇÃO =================
+
+    # =========================================================
+    # SEÇÃO 1 — POPULAÇÃO (abre por padrão)
+    # Entrega: pais_sel, pop_mode, custom_pop_main,
+    #          br_pop_tipo, sia_geo_ref e filt_* (UF/macro/reg/mun)
+    # =========================================================
     div(
       class = "cc-section cc-open",   # Population começa ABERTO
       div(class = "cc-section-header",
@@ -100,8 +137,14 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
       )
     ),
     tags$hr(),
-    
-    # ================= PROTOCOLO =================
+
+    # =========================================================
+    # SEÇÃO 2 — PROTOCOLO DE RASTREAMENTO
+    # Entrega: screen_method (hpv|cytology), target_age_min/max,
+    #          hpv_param_source / cito_param_source (preset ou
+    #          custom) e os 16+16 parâmetros numéricos de cada
+    #          modelo (só visíveis quando Customize está ativo).
+    # =========================================================
     div(
       class = "cc-section",   # começa FECHADO
       div(class = "cc-section-header",
@@ -287,7 +330,7 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
                 div(class = "cc-param-group",
                   div(class = "cc-param-group-title", "Cytology result"),
                   fluidRow(
-                    column(4, numericInput(ns("res_asch_pct"),  "HSIL / ASC-H / AIS / Ca (%)", value = CITO_DEFAULTS$res_asch_pct,  min = 0, max = 100, step = 0.01)),
+                    column(4, numericInput(ns("res_asch_pct"),  "ASC-H+ (%)", value = CITO_DEFAULTS$res_asch_pct,  min = 0, max = 100, step = 0.01)),
                     column(4, numericInput(ns("res_other_pct"), "Other abnormal (%)",          value = CITO_DEFAULTS$res_other_pct, min = 0, max = 100, step = 0.01)),
                     column(4, numericInput(ns("res_neg_pct"),   "Negative (%)",                value = CITO_DEFAULTS$res_neg_pct,   min = 0, max = 100, step = 0.01))
                   )
@@ -332,10 +375,13 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
     ),
     
     tags$hr(),
-    
-   
-   
-    # ================= COBERTURA =================
+
+
+
+    # =========================================================
+    # SEÇÃO 3 — COBERTURA DE RASTREAMENTO
+    # Entrega: coverage (0–100%)
+    # =========================================================
     div(
       class = "cc-section",
       div(class = "cc-section-header",
@@ -359,8 +405,13 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
     ),
     
     tags$hr(),
-    
-    # ================= RECURSOS / CAPACIDADES ==============
+
+    # =========================================================
+    # SEÇÃO 4 — RECURSOS / CAPACIDADES
+    # Entrega: cap_unidade (Day/Week/Month/Year) e as 4 capacidades
+    #          brutas (colposcopio, colposcopista, citopato, patol).
+    # O server multiplica pelo fator `cap_mult` para anualizar.
+    # =========================================================
     div(
       class = "cc-section",
       div(class = "cc-section-header",
@@ -406,6 +457,21 @@ mod_filters_cc_ui <- function(id, dim_country, br_code = NULL) {
 
 # ===========================================================
 # SERVER
+# -----------------------------------------------------------
+# Returns: reactive `filters` — lista nomeada com TODOS os
+#          parâmetros globais (país, pop, protocolo, presets,
+#          % clínicos, cobertura, capacidades anualizadas e
+#          filtros Brasil). É este reactive que circula no app
+#          como `input_global()`.
+#
+# Args:
+#   id                     - namespace do módulo
+#   pop_municipio_regional - data.table IBGE/ANS (município x
+#                            faixa x UF/macro/região). Usada só
+#                            para montar a cascata de seletores.
+#   cito_presets           - data.table com params de citologia
+#                            por fonte e UF (INCA, SISCAN).
+#   br_code                - código GLOBOCAN do Brasil (default 1001L)
 # ===========================================================
 
 mod_filters_cc_server <- function(id,
@@ -414,9 +480,14 @@ mod_filters_cc_server <- function(id,
                                   br_code = 1001L) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
-    
-    # ---------- HPV: validação + auto-balance ----------
+
+
+    # =========================================================
+    # BLOCO 1 — HPV: validação + auto-balance
+    #   Verifica se os grupos de % somam 100 e mantém essa soma
+    #   automaticamente via lock_pair()/lock_triplet() quando a
+    #   checkbox "Lock proportions while editing" está ativa.
+    # =========================================================
     if (!exists("HPV_DEFAULTS", inherits = TRUE)) {
       stop("mod_filters_cc_server(): objeto 'HPV_DEFAULTS' não encontrado.", call. = FALSE)
     }
@@ -429,13 +500,17 @@ mod_filters_cc_server <- function(id,
     cito_defaults <- get("CITO_DEFAULTS", inherits = TRUE)
     
     
+    # sum_check: TRUE se vetor soma 100 ± tol (trata NA como 0)
     sum_check <- function(x, tol = 0.1) {
       x <- suppressWarnings(as.numeric(x))
       x[is.na(x)] <- 0
       abs(sum(x) - 100) <= tol
     }
+    # sum_ok: conveniência para passar valores soltos
     sum_ok <- function(...) sum_check(c(...))
     
+    # param_errors: vetor de mensagens de erro ativas no painel HPV
+    # (alimenta o box vermelho em `params_alert`)
     param_errors <- reactive({
       if (!identical(input$screen_method, "hpv")) return(character(0))
       
@@ -453,21 +528,27 @@ mod_filters_cc_server <- function(id,
       errs <- param_errors()
       if (length(errs) == 0) return(NULL)
       div(
-        style="background:#ffe6e6;border:1px solid #cc0000;color:#990000;padding:10px;border-radius:8px;",
+        style="background:var(--cc-danger-bg);border:1px solid var(--cc-danger);color:var(--cc-danger);padding:10px;border-radius:8px;",
         strong("Please check parameters:"),
         tags$ul(lapply(errs, tags$li))
       )
     })
     
     # ---------- AUTO-BALANCE (estável) ----------
+    # rv_lock: estado compartilhado pelos observers de balance —
+    # `updating` quebra loops infinitos quando um update programático
+    # dispara outro observer; `prev` guarda o último valor visto por
+    # input, para identificar qual campo foi editado pelo usuário.
     rv_lock <- reactiveValues(updating = FALSE, prev = list())
-    
+
+    # clamp100: limita valor a [0, 100] e trata NA/strings
     clamp100 <- function(x) {
       x <- suppressWarnings(as.numeric(x))
       if (length(x) == 0L || is.na(x)) x <- 0
       max(0, min(100, x))
     }
     
+    # approx_eq: comparação numérica com tolerância (trata NA)
     approx_eq <- function(a, b, tol = 0.01) {
       a <- suppressWarnings(as.numeric(a)); b <- suppressWarnings(as.numeric(b))
       if (is.na(a) && is.na(b)) return(TRUE)
@@ -475,10 +556,14 @@ mod_filters_cc_server <- function(id,
       abs(a - b) <= tol
     }
     
+    # safe_update_num: wrapper de updateNumericInput com arredondamento
     safe_update_num <- function(id, val) {
       updateNumericInput(session, id, value = round(val, 2))
     }
-    
+
+    # lock_pair: mantém A + B = 100 quando o lock está ativo.
+    # Detecta qual dos dois foi editado (via rv_lock$prev) e ajusta
+    # o outro automaticamente.
     lock_pair <- function(idA, idB, tol = 0.01) {
       observeEvent(list(input[[idA]], input[[idB]], input$lock_prop, input$screen_method), {
         if (!identical(input$screen_method, "hpv")) return()
@@ -516,6 +601,9 @@ mod_filters_cc_server <- function(id,
       }, ignoreInit = TRUE)
     }
     
+    # lock_triplet: mantém A + B + C = 100 para grupos de 3 categorias.
+    #   remainder_id → campo que é ajustado por padrão (ex.: "Negative")
+    #   adjust_id    → campo reduzido quando a soma estourar 100
     lock_triplet <- function(idA, idB, idC, remainder_id, adjust_id, tol = 0.01) {
       ids <- c(idA, idB, idC)
       
@@ -577,12 +665,19 @@ mod_filters_cc_server <- function(id,
     lock_triplet("b16_neg_nic1", "b16_nic23", "b16_cancer", remainder_id = "b16_neg_nic1", adjust_id = "b16_nic23")
     lock_triplet("bo_neg_nic1",  "bo_nic23",  "bo_cancer",  remainder_id = "bo_neg_nic1",  adjust_id = "bo_nic23")
     
+    # Reset dos parâmetros HPV aos valores de HPV_DEFAULTS
     observeEvent(input$reset_params, {
       if (!identical(input$screen_method, "hpv")) return()
       for (nm in names(hpv_defaults)) {
         updateNumericInput(session, nm, value = hpv_defaults[[nm]])
       }
     }, ignoreInit = TRUE)
+
+    # =========================================================
+    # BLOCO 2 — Presets
+    #   HPV: ao selecionar preset, preenche os 16 campos.
+    #   Citologia: idem, com regra adicional por UF (SISCAN).
+    # =========================================================
 
     # ---------- Preset HPV: carrega parâmetros ao selecionar fonte ----------
     observeEvent(input$hpv_param_source, {
@@ -607,6 +702,10 @@ mod_filters_cc_server <- function(id,
     #   siscan + N UFs    → parâmetros SISCAN Brasil (fallback)
     #   custom            → usuário edita livremente, não carrega nada
 
+    # load_cito_preset: resolve fonte + UF → bloco de parâmetros
+    # correto dentro de `cito_presets` e aplica em tela.
+    # `meta$por_uf == TRUE` + 1 UF selecionada → pega dados da UF;
+    # qualquer outro caso cai no fallback "brasil".
     load_cito_preset <- function() {
       src <- input$cito_param_source
       if (is.null(src) || identical(src, "custom")) return()
@@ -626,10 +725,13 @@ mod_filters_cc_server <- function(id,
       }
     }
 
+    # Gatilho 1: usuário troca de fonte (inca2019 / siscan / ...)
     observeEvent(input$cito_param_source, {
       load_cito_preset()
     }, ignoreInit = TRUE)
 
+    # Gatilho 2: usuário muda a UF selecionada → releitura só faz
+    # sentido se a fonte atual é `por_uf = TRUE` (ex.: SISCAN)
     observeEvent(input$filt_uf, {
       if (!identical(input$screen_method, "cytology")) return()
       src <- input$cito_param_source
@@ -640,6 +742,12 @@ mod_filters_cc_server <- function(id,
       load_cito_preset()
     }, ignoreInit = TRUE, ignoreNULL = FALSE)
 
+    # =========================================================
+    # BLOCO 3 — Citologia: validação + auto-balance
+    #   Espelho do bloco 1 para o braço Citologia. Usa um estado
+    #   separado (`rv_lock_cito`) para não conflitar com o HPV.
+    # =========================================================
+
     # ---------- Cytology: validação + auto-balance ----------
     param_errors_cito <- reactive({
       if (!identical(input$screen_method, "cytology")) return(character(0))
@@ -649,10 +757,10 @@ mod_filters_cc_server <- function(id,
         errs <- c(errs, "Cytology result must sum to 100%.")
       }
       if (!sum_ok(input$b_asch_neg_nic1_pct, input$b_asch_nic23_pct, input$b_asch_cancer_pct)) {
-        errs <- c(errs, "Biopsy result (HSIL / ASC-H / AOI / AIS / Carcinoma arm) must sum to 100%.")
+        errs <- c(errs, "Biopsy result ASC-H+ must sum to 100%.")
       }
       if (!sum_ok(input$b_other_neg_nic1_pct, input$b_other_nic23_pct, input$b_other_cancer_pct)) {
-        errs <- c(errs, "Biopsy result (Other abnormalities arm) must sum to 100%.")
+        errs <- c(errs, "Biopsy result (Other abnormal arm) must sum to 100%.")
       }
       errs
     })
@@ -661,7 +769,7 @@ mod_filters_cc_server <- function(id,
       errs <- param_errors_cito()
       if (length(errs) == 0) return(NULL)
       div(
-        style="background:#ffe6e6;border:1px solid #cc0000;color:#990000;padding:10px;border-radius:8px;",
+        style="background:var(--cc-danger-bg);border:1px solid var(--cc-danger);color:var(--cc-danger);padding:10px;border-radius:8px;",
         strong("Please check parameters:"),
         tags$ul(lapply(errs, tags$li))
       )
@@ -729,16 +837,26 @@ mod_filters_cc_server <- function(id,
     lock_triplet_cito("b_other_neg_nic1_pct", "b_other_nic23_pct", "b_other_cancer_pct",
                       remainder_id = "b_other_neg_nic1_pct", adjust_id = "b_other_nic23_pct")
     
+    # Reset dos parâmetros Citologia aos valores de CITO_DEFAULTS
     observeEvent(input$reset_params_cito, {
       if (!identical(input$screen_method, "cytology")) return()
       for (nm in names(cito_defaults)) {
         updateNumericInput(session, nm, value = cito_defaults[[nm]])
       }
     }, ignoreInit = TRUE)
-    
-    
-    
+
+
+
+    # =========================================================
+    # BLOCO 4 — Unidade de capacidade
+    #   Quando o usuário muda Dia ↔ Sem ↔ Mês ↔ Ano, os 4 inputs
+    #   numéricos são reescalados proporcionalmente para que o
+    #   valor "mostrado" corresponda à nova unidade.
+    #   Fatores relativos a Ano: Dia×240, Semana×48, Mês×12.
+    # =========================================================
+
     # ---------- Conversão automática de unidade de capacidade ----------
+    # unit_mult: multiplicador para converter (unidade) → ano
     unit_mult <- function(u) switch(u, dia = 240, semana = 48, mes = 12, ano = 1, 1)
 
     prev_cap_unit <- reactiveVal("ano")
@@ -757,6 +875,17 @@ mod_filters_cc_server <- function(id,
 
       prev_cap_unit(new_unit)
     }, ignoreInit = TRUE)
+
+    # =========================================================
+    # BLOCO 5 — Filtros geográficos Brasil
+    #   Monta um data.table "espelho" (dt_br) com UF/macro/reg/mun
+    #   distintos e configura a cascata dos selectizeInputs:
+    #     UF  → macro/reg/mun
+    #     macro → reg/mun
+    #     reg   → mun
+    #   O botão "Clear filters" zera as seleções mas mantém as
+    #   opções disponíveis (se Brasil continuar selecionado).
+    # =========================================================
 
     # ---------- BASE BRASIL PARA FILTROS GEOGRÁFICOS ----------
     dt_br <- NULL
@@ -925,6 +1054,15 @@ mod_filters_cc_server <- function(id,
       )
     }, ignoreNULL = FALSE)
     
+    # =========================================================
+    # BLOCO 6 — Saída reativa (input_global)
+    #   Empacota TODOS os inputs num único list para consumo dos
+    #   outros módulos. Capacidades já saem em base anual.
+    #   Usa `%||%` (de 01_utils_cc.R) para aplicar fallback de
+    #   HPV_DEFAULTS / CITO_DEFAULTS caso algum input venha NULL
+    #   (tela ainda não renderizou aquele campo, por ex.).
+    # =========================================================
+
     # ---------- Saída: lista reativa com todos os filtros ----------
     filters <- reactive({
       cap_unit <- input$cap_unidade %||% "ano"
